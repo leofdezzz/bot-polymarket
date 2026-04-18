@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Paper Trading</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #07090f;
+  --surface:  #0d1117;
+  --surface2: #111827;
+  --border:   rgba(255,255,255,0.06);
+  --text:     #f1f5f9;
+  --muted:    #4b5563;
+  --muted2:   #6b7280;
+  --green:    #10b981;
+  --red:      #f43f5e;
+  --indigo:   #818cf8;
+  --radius:   10px;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ── HEADER ────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(7,9,15,0.92);
+  backdrop-filter: blur(12px);
+}
+.logo { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; white-space: nowrap; }
+.logo span { color: var(--indigo); }
+.topbar-stats { display: flex; gap: 28px; flex: 1; }
+.tstat { display: flex; flex-direction: column; }
+.tstat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+.tstat-value { font-size: 13px; font-weight: 600; font-family: var(--font-mono); }
+.topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.restart-form { display: flex; align-items: center; gap: 6px; }
+.restart-form input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: 6px;
+  width: 100px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color .2s;
+}
+.restart-form input:focus { border-color: var(--indigo); }
+.restart-form input::placeholder { color: var(--muted); }
+.btn-restart {
+  background: var(--indigo);
+  color: #fff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.btn-restart:hover { opacity: .8; }
+.live-badge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted2);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  animation: blink 2s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+#clock { font-family: var(--font-mono); font-size: 12px; color: var(--muted2); }
+
+/* ── MAIN GRID ──────────────────────────────────────── */
+.layout { padding: 20px 28px; display: flex; flex-direction: column; gap: 20px; }
+
+/* ── BOT SCORECARDS ─────────────────────────────────── */
+.scorecards { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px; }
+.scorecard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  position: relative;
+  overflow: hidden;
+}
+.scorecard::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--bot-color, var(--indigo));
+  opacity: 0.7;
+}
+.scorecard.active { border-color: var(--bot-color, var(--indigo)); background: var(--surface2); }
+.scorecard:hover { border-color: rgba(255,255,255,0.12); }
+.sc-rank { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+.sc-name { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-desc { font-size: 10px; color: var(--muted2); margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-pnl { font-size: 20px; font-weight: 800; font-family: var(--font-mono); line-height: 1; }
+.sc-meta { display: flex; gap: 10px; margin-top: 8px; }
+.sc-meta-item { font-size: 10px; color: var(--muted); }
+.sc-meta-item span { color: var(--muted2); font-weight: 600; }
+
+/* ── CHART + POSITIONS ──────────────────────────────── */
+.middle { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.card-label {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 16px;
+}
+.chart-wrap { position: relative; height: 220px; }
+
+.positions-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.positions-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.positions-bot-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.positions-bot-name { font-size: 12px; font-weight: 700; }
+.positions-bot-stats { margin-left: auto; display: flex; gap: 12px; }
+.pos-stat { font-size: 10px; color: var(--muted); text-align: right; }
+.pos-stat span { display: block; font-size: 12px; font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+
+.pos-table { width: 100%; border-collapse: collapse; flex: 1; }
+.pos-table thead th {
+  padding: 7px 12px;
+  text-align: left;
+  font-size: 9px; font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  background: rgba(0,0,0,.2);
+  border-bottom: 1px solid var(--border);
+}
+.pos-table tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  vertical-align: middle;
+}
+.pos-table tbody tr:last-child td { border-bottom: none; }
+.pos-table tbody tr:hover td { background: rgba(255,255,255,.02); }
+
+.outcome-yes { color: #06b6d4; font-weight: 700; font-size: 10px; }
+.outcome-no  { color: #a855f7; font-weight: 700; font-size: 10px; }
+.pos-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ── COLORS ─────────────────────────────────────────── */
+.pos  { color: var(--green); }
+.neg  { color: var(--red); }
+.neu  { color: var(--muted2); }
+.mono { font-family: var(--font-mono); }
+
+/* ── TOAST ───────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px; border-radius: 8px;
+  font-size: 12px; opacity: 0;
+  transition: opacity .25s; pointer-events: none; z-index: 100;
+}
+#toast.show { opacity: 1; }
+
+@media (max-width: 1200px) {
+  .scorecards { grid-template-columns: repeat(3,1fr); }
+  .middle { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .scorecards { grid-template-columns: repeat(2,1fr); }
+  .topbar-stats { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">PM <span>Paper</span> Trading</div>
+  <div class="topbar-stats">
+    <div class="tstat">
+      <span class="tstat-label">Balance / bot</span>
+      <span class="tstat-value" id="h-balance">—</span>
+    </div>
+    <div class="tstat">
+      <span class="tstat-label">Uptime</span>
+      <span class="tstat-value" id="h-uptime">—</span>
+    </div>
+    <div class="tstat">
+      <span class="tstat-label">Mercados</span>
+      <span class="tstat-value" id="h-markets">—</span>
+    </div>
+    <div class="tstat">
+      <span class="tstat-label">Líder</span>
+      <span class="tstat-value" id="h-leader">—</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="restart-form">
+      <input type="number" id="balance-input" placeholder="$USDC" min="100" step="100">
+      <button class="btn-restart" onclick="restartSim()">Reiniciar</button>
+      <button class="btn-restart" style="background:#374151" onclick="confirmReset()" title="Borrar todos los datos">⬛ Reset</button>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span id="clock">—</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- SCORECARDS -->
+  <div class="scorecards" id="scorecards"></div>
+
+  <!-- CHART + POSITIONS -->
+  <div class="middle">
+    <div class="chart-card">
+      <div class="card-label">P&amp;L % en tiempo real</div>
+      <div class="chart-wrap"><canvas id="pnl-chart"></canvas></div>
+    </div>
+    <div class="positions-card" id="positions-card">
+      <div class="positions-header">
+        <div class="positions-bot-dot" id="pos-dot"></div>
+        <div class="positions-bot-name" id="pos-name">—</div>
+        <div class="positions-bot-stats">
+          <div class="pos-stat">Balance<span id="pos-balance">—</span></div>
+          <div class="pos-stat">Win rate<span id="pos-winrate">—</span></div>
+        </div>
+      </div>
+      <table class="pos-table">
+        <thead>
+          <tr>
+            <th>Mercado</th>
+            <th>Dir</th>
+            <th>Entrada</th>
+            <th>Actual</th>
+            <th>P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="pos-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── state ──────────────────────────────────────────────
+let state = null;
+let selectedBot = null;
+let chart = null;
+
+// ── clock ──────────────────────────────────────────────
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('es-ES', { hour12: false });
+}
+setInterval(tick, 1000); tick();
+
+// ── helpers ────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt$ = v => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : 'neu';
+const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── scorecards ─────────────────────────────────────────
+const MEDALS = ['1°','2°','3°','4°','5°','6°'];
+
+function renderScorecards(bots) {
+  const ranked = [...bots].sort((a, b) => b.pnl - a.pnl);
+  const container = $('scorecards');
+  container.innerHTML = ranked.map((bot, i) => {
+    const pnlClass = cls(bot.pnl_pct);
+    const isActive = selectedBot === bot.name;
+    return `<div class="scorecard ${isActive ? 'active' : ''}"
+         style="--bot-color:${bot.color}"
+         onclick="selectBot('${bot.name}')">
+      <div class="sc-rank">${MEDALS[i]} ${bot.status === 'analyzing' ? '·' : ''}</div>
+      <div class="sc-name">${bot.name}</div>
+      <div class="sc-desc">${bot.description}</div>
+      <div class="sc-pnl ${pnlClass}">${fmtPct(bot.pnl_pct)}</div>
+      <div class="sc-meta">
+        <div class="sc-meta-item">pos <span>${bot.open_count}</span></div>
+        <div class="sc-meta-item">trades <span>${bot.trades}</span></div>
+        <div class="sc-meta-item">win <span>${bot.win_rate}%</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── positions panel ────────────────────────────────────
+function renderPositions(bot) {
+  if (!bot) return;
+  $('pos-dot').style.background = bot.color;
+  $('pos-name').textContent = bot.name;
+  $('pos-balance').textContent = fmt$(bot.total_value);
+  $('pos-winrate').textContent = bot.win_rate + '%';
+
+  const tbody = $('pos-tbody');
+  if (!bot.positions.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="pos-empty">Sin posiciones abiertas</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = bot.positions.map(p => `
+    <tr>
+      <td title="${p.question}">${trunc(p.question, 26)}</td>
+      <td><span class="${p.outcome === 'YES' ? 'outcome-yes' : 'outcome-no'}">${p.outcome}</span></td>
+      <td class="mono">${p.entry_price.toFixed(3)}</td>
+      <td class="mono">${p.current_price.toFixed(3)}</td>
+      <td class="mono ${cls(p.pnl)}">${p.pnl >= 0 ? '+' : ''}${fmt$(p.pnl)}</td>
+    </tr>`).join('');
+}
+
+function selectBot(name) {
+  selectedBot = name;
+  const bot = state?.bots.find(b => b.name === name);
+  if (bot) {
+    renderPositions(bot);
+    renderScorecards(state.bots);
+  }
+}
+
+// ── header ─────────────────────────────────────────────
+function renderHeader(s) {
+  $('h-balance').textContent = fmt$(s.initial_balance);
+  $('h-uptime').textContent = s.uptime;
+  $('h-markets').textContent = s.market_count ?? '—';
+  const leader = [...s.bots].sort((a,b) => b.pnl - a.pnl)[0];
+  if (leader) $('h-leader').innerHTML =
+    `<span style="color:${leader.color}">${leader.name}</span> ${fmtPct(leader.pnl_pct)}`;
+}
+
+// ── chart ───────────────────────────────────────────────
+function initChart() {
+  const ctx = $('pnl-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#4b5563', boxWidth: 10, font: { size: 10 }, padding: 12 }
+        },
+        tooltip: {
+          backgroundColor: '#111827',
+          borderColor: 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          titleColor: '#6b7280',
+          bodyColor: '#f1f5f9',
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'minute', displayFormats: { minute: 'HH:mm' } },
+          ticks: { color: '#374151', maxTicksLimit: 6, font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'rgba(255,255,255,0.06)' }
+        },
+        y: {
+          ticks: {
+            color: '#374151', font: { size: 10 },
+            callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
+          },
+          grid: { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'rgba(255,255,255,0.06)' }
+        }
+      }
+    }
+  });
+}
+
+function updateChart(history) {
+  if (!chart || !state) return;
+  Object.entries(history).forEach(([name, points]) => {
+    const data = points.map(p => ({ x: p.ts, y: p.pnl_pct }));
+    const color = state.bots.find(b => b.name === name)?.color || '#888';
+    const idx = chart.data.datasets.findIndex(d => d.label === name);
+    if (idx === -1) {
+      chart.data.datasets.push({
+        label: name, data,
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+      });
+    } else {
+      chart.data.datasets[idx].data = data;
+    }
+  });
+  chart.update('none');
+}
+
+// ── fetch ───────────────────────────────────────────────
+async function fetchState() {
+  try {
+    const r = await fetch('/api/state');
+    if (!r.ok) return;
+    state = await r.json();
+
+    renderHeader(state);
+    renderScorecards(state.bots);
+
+    if (!selectedBot && state.bots.length) {
+      selectedBot = [...state.bots].sort((a,b) => b.pnl - a.pnl)[0].name;
+    }
+    const bot = state.bots.find(b => b.name === selectedBot);
+    if (bot) renderPositions(bot);
+
+  } catch(e) { console.error(e); }
+}
+
+async function fetchHistory() {
+  try {
+    const r = await fetch('/api/history');
+    if (!r.ok) return;
+    updateChart(await r.json());
+  } catch(e) { console.error(e); }
+}
+
+async function confirmReset() {
+  const val = parseFloat($('balance-input').value) || null;
+  const balance = val ?? (state?.initial_balance ?? 1000);
+  if (!confirm(`¿Borrar TODOS los datos y empezar desde cero con $${balance}?`)) return;
+  const r = await fetch('/api/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ balance })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast('Datos borrados. Simulación reiniciada.');
+    $('balance-input').value = '';
+    chart.data.datasets = [];
+    chart.update();
+    selectedBot = null;
+    fetchState();
+  }
+}
+
+async function restartSim() {
+  const val = parseFloat($('balance-input').value);
+  if (!val || val < 100) { toast('Balance mínimo: $100'); return; }
+  const r = await fetch('/api/restart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ balance: val })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast(`Reiniciado con ${fmt$(val)} por bot`);
+    $('balance-input').value = '';
+    chart.data.datasets = [];
+    chart.update();
+    selectedBot = null;
+    fetchState();
+  }
+}
+
+// ── init ────────────────────────────────────────────────
+initChart();
+fetchState();
+fetchHistory();
+setInterval(fetchState, 3000);
+setInterval(fetchHistory, 5000);
+</script>
+</body>
+</html>

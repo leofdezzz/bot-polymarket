@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.polymarket.com)",
+      "WebFetch(domain:pm.wiki)",
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(curl -s http://localhost:5000/api/state)",
+      "Bash(kill %1)",
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

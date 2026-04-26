@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Polymarket Paper Trading Simulator
-6 bots con estrategias distintas + dashboard web + persistencia de estado.
+5 bots con estrategias distintas + dashboard web + persistencia de estado.
 
 Uso:
     python main.py                     # $1000 balance, puerto 5000
@@ -22,12 +22,11 @@ from engine.persistence import (
     save_all, load_portfolios, load_history,
     restore_portfolio, reset_state,
 )
-from strategies.arbitrage import ArbitrageStrategy
 from strategies.contrarian import ContrarianStrategy
-from strategies.kelly import KellyStrategy
-from strategies.momentum import MomentumStrategy
-from strategies.volume_spike import VolumeSpikeStrategy
-from strategies.geopolitical_edge import GeopoliticalEdgeStrategy
+from strategies.polymarket_5m_momentum import Polymarket5MomentumStrategy
+from strategies.polymarket_5m_rsi import Polymarket5RSIStrategy
+from strategies.polymarket_15m_momentum import Polymarket15MomentumStrategy
+from strategies.polymarket_15m_mean_rev import Polymarket15MeanRevStrategy
 import web.app as web_app
 
 logging.basicConfig(
@@ -37,12 +36,11 @@ logging.basicConfig(
 )
 
 STRATEGY_CLASSES = [
-    GeopoliticalEdgeStrategy,
-    ArbitrageStrategy,
-    MomentumStrategy,
     ContrarianStrategy,
-    VolumeSpikeStrategy,
-    KellyStrategy,
+    Polymarket5MomentumStrategy,
+    Polymarket5RSIStrategy,
+    Polymarket15MomentumStrategy,
+    Polymarket15MeanRevStrategy,
 ]
 
 _client: PolymarketClient | None = None

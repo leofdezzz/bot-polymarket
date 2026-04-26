@@ -94,7 +94,7 @@ body {
 .layout { padding: 20px 28px; display: flex; flex-direction: column; gap: 20px; }
 
 /* ── BOT SCORECARDS ─────────────────────────────────── */
-.scorecards { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px; }
+.scorecards { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
 .scorecard {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -307,7 +307,7 @@ function toast(msg) {
 }
 
 // ── scorecards ─────────────────────────────────────────
-const MEDALS = ['1°','2°','3°','4°','5°','6°'];
+const MEDALS = ['1°','2°','3°','4°','5°'];
 
 function renderScorecards(bots) {
   const ranked = [...bots].sort((a, b) => b.pnl - a.pnl);

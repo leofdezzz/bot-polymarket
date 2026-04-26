@@ -14,12 +14,11 @@ _restart_callback = None
 MAX_HISTORY = 2000  # ~2h45m a 5s por punto
 
 BOT_COLORS = {
-    "geopolitical_edge": "#f97316",
-    "arb_hunter":        "#06b6d4",
-    "momentum_surfer":   "#10b981",
-    "contrarian_ace":    "#f43f5e",
-    "volume_hawk":       "#8b5cf6",
-    "kelly_master":      "#eab308",
+    "contrarian_ace":            "#f43f5e",
+    "polymarket_5m_momentum":   "#10b981",
+    "polymarket_5m_rsi":         "#06b6d4",
+    "polymarket_15m_momentum":   "#f97316",
+    "polymarket_15m_mean_rev":    "#8b5cf6",
 }
 
 

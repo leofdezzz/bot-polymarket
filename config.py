@@ -1,6 +1,6 @@
 import argparse
 
-DEFAULT_BALANCE = 1000.0
+DEFAULT_BALANCE = 50.0
 TRADE_SIZE_PCT = 0.05          # 5% of portfolio per trade
 MAX_POSITION_SIZE_PCT = 0.15   # Max 15% in one market
 MAX_POSITIONS = 10             # Max open positions per bot

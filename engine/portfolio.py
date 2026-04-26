@@ -19,6 +19,8 @@ class Position:
     close_price: float = 0.0
     close_time: float = 0.0
     close_reason: str = ""
+    market_type: str = ""   # "5min", "15min", or "regular"
+    end_date: str = ""     # when the market expires
 
     @property
     def cost(self) -> float:
@@ -87,11 +89,11 @@ class Portfolio:
                 and cost <= self.cash * config.MAX_POSITION_SIZE_PCT * 3
             )
 
-    def buy(self, market_id: str, question: str, outcome: str, price: float) -> Optional[Position]:
-        """Open a position using TRADE_SIZE_PCT of available cash."""
+    def buy(self, market_id: str, question: str, outcome: str, price: float,
+            market_type: str = "", end_date: str = "") -> Optional[Position]:
         with self._lock:
             if market_id in self._positions and not self._positions[market_id].closed:
-                return None  # already have this market open
+                return None
 
             trade_cash = self.cash * config.TRADE_SIZE_PCT
             open_count = len([p for p in self._positions.values() if not p.closed])
@@ -107,11 +109,29 @@ class Portfolio:
                 shares=shares,
                 entry_price=price,
                 current_price=price,
+                market_type=market_type,
+                end_date=end_date,
             )
             self._positions[market_id] = pos
             self.cash -= trade_cash
             self.trades_count += 1
             return pos
+
+    def check_fast_expiry(self, market_id: str, market: "Market") -> Optional[str]:
+        with self._lock:
+            pos = self._positions.get(market_id)
+            if pos is None or pos.closed or not pos.market_type:
+                return None
+
+            if pos.market_type != market.market_type:
+                return None
+
+            if market.market_type == "5min" and market.minutes_to_expiry <= 0:
+                return "expired-5min"
+            elif market.market_type == "15min" and market.minutes_to_expiry <= 0:
+                return "expired-15min"
+
+            return None
 
     def update_prices(self, market_id: str, yes_price: float):
         """Update position mark-to-market and check stop-loss/take-profit."""

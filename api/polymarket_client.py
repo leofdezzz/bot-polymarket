@@ -80,12 +80,41 @@ class Market:
     def price_sum(self) -> float:
         return self.yes_price + self.no_price
 
+    @property
+    def minutes_to_expiry(self) -> float:
+        return self.days_to_expiry * 1440
+
+    @property
+    def market_type(self) -> str:
+        mins = self.minutes_to_expiry
+        if mins <= 0:
+            return "expired"
+        elif mins <= 7:
+            return "5min"
+        elif mins <= 20:
+            return "15min"
+        else:
+            return "regular"
+
+    @property
+    def is_fast_market(self) -> bool:
+        return self.market_type in ("5min", "15min")
+
     def is_tradeable(self) -> bool:
         return (
             self.active
             and not self.closed
             and self.volume >= config.MIN_VOLUME
             and self.liquidity >= config.MIN_LIQUIDITY
+            and 0.01 < self.yes_price < 0.99
+        )
+
+    def is_tradeable_fast(self, min_volume: float = 10, min_liquidity: float = 10) -> bool:
+        return (
+            self.active
+            and not self.closed
+            and self.volume >= min_volume
+            and self.liquidity >= min_liquidity
             and 0.01 < self.yes_price < 0.99
         )
 
@@ -139,6 +168,7 @@ class PolymarketClient:
 
     def __init__(self):
         self._cache: list[Market] = []
+        self._all_cache: list[Market] = []
         self._cache_time: float = 0.0
         self._lock = threading.Lock()
         self.history = PriceHistory()
@@ -164,18 +194,39 @@ class PolymarketClient:
             now = time.time()
             if force_refresh or now - self._cache_time > CACHE_TTL:
                 raw = self._fetch_markets()
-                if raw:  # solo actualiza cache si la petición tuvo éxito
+                if raw:
                     markets = [Market(m) for m in raw]
+                    self._all_cache = markets
                     tradeable = [m for m in markets if m.is_tradeable()]
                     self._cache = tradeable
                     self._cache_time = now
-                    logger.info(f"Fetched {len(self._cache)} tradeable markets")
+                    logger.info(f"Fetched {len(self._cache)} tradeable, {len(self._all_cache)} total")
 
-            # Registra historial en cada llamada (incluso cache hit) para acumular señales
             for m in self._cache:
                 self.history.record(m.id, m.yes_price, m.volume)
 
             return list(self._cache)
+
+    def get_all_markets(self, force_refresh: bool = False) -> list[Market]:
+        with self._lock:
+            now = time.time()
+            if force_refresh or now - self._cache_time > CACHE_TTL:
+                raw = self._fetch_markets()
+                if raw:
+                    markets = [Market(m) for m in raw]
+                    self._all_cache = markets
+                    tradeable = [m for m in markets if m.is_tradeable()]
+                    self._cache = tradeable
+                    self._cache_time = now
+
+            for m in self._all_cache:
+                self.history.record(m.id, m.yes_price, m.volume)
+
+            return list(self._all_cache)
+
+    def get_fast_markets(self, force_refresh: bool = False) -> list[Market]:
+        all_markets = self.get_all_markets(force_refresh)
+        return [m for m in all_markets if m.is_fast_market and m.is_tradeable_fast()]
 
     def get_market(self, market_id: str) -> Optional[Market]:
         markets = self.get_markets()

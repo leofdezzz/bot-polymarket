@@ -12,6 +12,8 @@ class TradeSignal:
         self.price = price         # entry price
         self.confidence = confidence  # 0-1, used to filter weak signals
         self.reason = reason
+        self.market_type = market.market_type
+        self.end_date = market.end_date
 
 
 class BaseStrategy(ABC):
@@ -49,6 +51,8 @@ class BaseStrategy(ABC):
                 question=signal.market.question,
                 outcome=signal.outcome,
                 price=signal.price,
+                market_type=signal.market_type,
+                end_date=signal.end_date,
             )
 
     @abstractmethod

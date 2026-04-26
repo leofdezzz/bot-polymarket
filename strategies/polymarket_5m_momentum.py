@@ -1,56 +1,96 @@
 """
-Polymarket 5-minute Momentum + Volume Strategy:
-Buys when price change > threshold with volume confirmation.
-For fast-resolving markets (5 min).
+Polymarket 5-minute Crypto Direction Strategy:
+Operates ONLY on 5-minute Polymarket markets about BTC/ETH price direction.
+Buys YES when price going up, NO when going down.
 """
+import logging
+
 from api.polymarket_client import Market, PolymarketClient
 from engine.portfolio import Portfolio
 from strategies.base import BaseStrategy, TradeSignal
 
+logger = logging.getLogger(__name__)
+
+CRYPTO_KEYWORDS = ['btc', 'bitcoin', 'eth', 'ethereum', 'crypto']
+DIRECTION_KEYWORDS = ['up', 'down', 'higher', 'lower', 'above', 'below', 'increase', 'decrease', 'rise', 'fall']
+
+
+def is_crypto_direction_market(market: Market) -> bool:
+    q = market.question.lower()
+    has_crypto = any(k in q for k in CRYPTO_KEYWORDS)
+    has_direction = any(k in q for k in DIRECTION_KEYWORDS)
+    return has_crypto and has_direction
+
 
 class Polymarket5MomentumStrategy(BaseStrategy):
     name = "polymarket_5m_momentum"
-    description = "5min Momentum+Vol: sigue tendencias con volumen"
-    PRICE_CHANGE_THRESHOLD = 0.008
-    VOLUME_RATIO_MIN = 1.15
+    description = "5min Crypto: BTC/ETH up/down"
+    MIN_CONFIDENCE = 0.3
     MIN_HISTORY = 2
-    MIN_VOLUME = 100
+    MIN_VOLUME = 10
 
-    def _has_momentum(self, market_id: str) -> tuple[bool, float, float]:
-        history = self.client.history.get(market_id)
-        if len(history) < self.MIN_HISTORY:
-            return False, 0.0, 0.0
-        prices = [h[1] for h in history]
-        volumes = [h[2] for h in history]
+    def run(self):
+        markets = self.client.get_all_markets()
+        open_ids = {p.market_id for p in self.portfolio.open_positions()}
 
-        price_change = (prices[-1] - prices[0]) / prices[0] if prices[0] > 0 else 0.0
+        for market in markets:
+            if market.id in open_ids and market.is_fast_market:
+                self.portfolio.update_prices(market.id, market.yes_price)
 
-        if len(volumes) >= 2:
-            vol_ratio = volumes[-1] / max(volumes[0], 1) if volumes[0] > 0 else 1.0
-        else:
-            vol_ratio = 1.0
+        signals = self.generate_signals(markets)
+        signals.sort(key=lambda s: s.confidence, reverse=True)
 
-        return abs(price_change) >= self.PRICE_CHANGE_THRESHOLD, price_change, vol_ratio
+        for signal in signals:
+            if signal.confidence < self.MIN_CONFIDENCE:
+                continue
+            if signal.market.id in open_ids:
+                continue
+            self.portfolio.buy(
+                market_id=signal.market.id,
+                question=signal.market.question,
+                outcome=signal.outcome,
+                price=signal.price,
+                market_type=signal.market_type,
+                end_date=signal.end_date,
+            )
 
     def generate_signals(self, markets: list[Market]) -> list[TradeSignal]:
         signals = []
         for m in markets:
-            if m.volume < self.MIN_VOLUME:
+            if m.market_type != "5min":
+                continue
+            if not is_crypto_direction_market(m):
+                continue
+            if not m.is_tradeable_fast(min_volume=self.MIN_VOLUME, min_liquidity=10):
                 continue
 
-            has_momentum, change, vol_ratio = self._has_momentum(m.id)
+            history = self.client.history.get(m.id)
+            if len(history) < self.MIN_HISTORY:
+                continue
 
-            if has_momentum and vol_ratio >= self.VOLUME_RATIO_MIN:
-                conf = min(abs(change) / 0.03, 1.0) * min(vol_ratio / 2.0, 1.0)
-                outcome = "YES" if change > 0 else "NO"
-                price = m.yes_price if outcome == "YES" else m.no_price
-                signals.append(TradeSignal(m, outcome, price, conf,
-                                           f"MOM5m {change:+.1%} vol:{vol_ratio:.1f}"))
-            elif vol_ratio >= self.VOLUME_RATIO_MIN * 1.5:
-                conf = min(vol_ratio / 3.0, 1.0) * 0.4
-                outcome = "YES" if m.yes_price < 0.5 else "NO"
-                price = m.yes_price if outcome == "YES" else m.no_price
-                signals.append(TradeSignal(m, outcome, price, conf,
-                                           f"VOL5m {vol_ratio:.1f}"))
+            prices = [h[1] for h in history]
+            price_change = (prices[-1] - prices[0]) / prices[0] if prices[0] > 0 else 0.0
 
+            if abs(price_change) < 0.003:
+                continue
+
+            conf = min(abs(price_change) / 0.02, 1.0)
+
+            q = m.question.lower()
+            if any(w in q for w in ['up', 'higher', 'above', 'increase', 'rise']):
+                outcome = "YES"
+                price = m.yes_price
+                reason = f"UP {price_change:+.1%}"
+            elif any(w in q for w in ['down', 'lower', 'below', 'decrease', 'fall']):
+                outcome = "NO"
+                price = m.no_price
+                reason = f"DOWN {price_change:+.1%}"
+            else:
+                outcome = "YES" if price_change > 0 else "NO"
+                price = m.yes_price if price_change > 0 else m.no_price
+                reason = f"DIR {price_change:+.1%}"
+
+            signals.append(TradeSignal(m, outcome, price, conf, reason))
+
+        signals.sort(key=lambda s: s.confidence, reverse=True)
         return signals

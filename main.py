@@ -30,9 +30,12 @@ from strategies.polymarket_15m_mean_rev import Polymarket15MeanRevStrategy
 import web.app as web_app
 
 logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    handlers=[logging.FileHandler("paper_trader.log")],
+    level=logging.INFO,
+    format="%(levelname)s: [%(name)s] %(message)s",
+    handlers=[
+        logging.FileHandler("paper_trader.log"),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 
 STRATEGY_CLASSES = [
@@ -78,6 +81,18 @@ def save_loop():
             save_all(_traders, web_app.get_history())
 
 
+def resolve_loop():
+    """Resuelve posiciones expiradas cada 15 segundos."""
+    while not _stop_event.is_set():
+        _stop_event.wait(timeout=15)
+        if not _stop_event.is_set():
+            for t in _traders:
+                try:
+                    t.strategy.client.resolve_all_expired_positions(t.portfolio)
+                except Exception as e:
+                    logger.warning(f"[{t.name}] resolve error: {e}")
+
+
 def history_loop():
     """Registra snapshot de P&L cada 5 segundos."""
     while not _stop_event.is_set():
@@ -116,6 +131,8 @@ def parse_args():
                         help=f"Segundos entre actualizaciones (default: {config.UPDATE_INTERVAL})")
     parser.add_argument("--port", type=int, default=5000,
                         help="Puerto del dashboard web (default: 5000)")
+    parser.add_argument("--reset", action="store_true",
+                        help="Limpiar estado guardado y empezar desde cero")
     args, unknown = parser.parse_known_args()
     if unknown:
         print(f"  Aviso: argumentos ignorados: {unknown}")
@@ -144,12 +161,16 @@ def main():
         _client.get_markets()
         time.sleep(0.5)
 
-    # Carga estado guardado
-    saved_portfolios = load_portfolios()
-    saved_history    = load_history()
+    if args.reset:
+        print("  Limpiando estado guardado...")
+        reset_state()
+        saved_portfolios = {}
+        saved_history = {}
+    else:
+        saved_portfolios = load_portfolios()
+        saved_history = load_history()
 
     if saved_portfolios:
-        # Usa el balance guardado del primer bot que tenga estado
         first = next(iter(saved_portfolios.values()), {})
         _initial_balance = first.get("initial_balance", args.balance)
         print(f"  Estado anterior restaurado (balance: ${_initial_balance:,.2f})")
@@ -179,6 +200,7 @@ def main():
     # Hilos de background
     threading.Thread(target=history_loop, daemon=True, name="history").start()
     threading.Thread(target=save_loop,    daemon=True, name="saver").start()
+    threading.Thread(target=resolve_loop, daemon=True, name="resolver").start()
 
     # Primera ronda de estrategias
     print(f"  Ejecutando estrategias...")

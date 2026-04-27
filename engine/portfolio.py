@@ -1,9 +1,12 @@
 import time
 import threading
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
 import config
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -93,12 +96,20 @@ class Portfolio:
             market_type: str = "", end_date: str = "") -> Optional[Position]:
         with self._lock:
             if market_id in self._positions and not self._positions[market_id].closed:
+                logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - already in position")
                 return None
 
             trade_cash = self.cash * config.TRADE_SIZE_PCT
             open_count = len([p for p in self._positions.values() if not p.closed])
 
-            if self.cash < trade_cash or open_count >= config.MAX_POSITIONS or price <= 0:
+            if self.cash < trade_cash:
+                logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - insufficient cash ${self.cash:.2f} < ${trade_cash:.2f}")
+                return None
+            if open_count >= config.MAX_POSITIONS:
+                logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - max positions reached ({open_count})")
+                return None
+            if price <= 0:
+                logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - invalid price {price}")
                 return None
 
             shares = trade_cash / price
@@ -115,6 +126,7 @@ class Portfolio:
             self._positions[market_id] = pos
             self.cash -= trade_cash
             self.trades_count += 1
+            logger.info(f"[{self.bot_name}] BUY {outcome} {market_id[:8]} {shares:.2f} @ {price:.3f} cost=${trade_cash:.2f}")
             return pos
 
     def check_fast_expiry(self, market_id: str, market: "Market") -> Optional[str]:
@@ -163,15 +175,50 @@ class Portfolio:
                 self._close_position(pos, reason)
             return reason
 
+    def check_and_close_expired(self, market_id: str, market_type: str, minutes_to_expiry: float):
+        """Close positions in fast markets that have expired."""
+        with self._lock:
+            pos = self._positions.get(market_id)
+            if pos is None or pos.closed:
+                return
+            if pos.market_type != market_type:
+                return
+            if minutes_to_expiry > 0:
+                return
+            self._close_position(pos, "expired")
+
+    def resolve_position(self, market_id: str, won: bool, reason: str):
+        """Resolve a position with win/loss determined by actual market outcome."""
+        with self._lock:
+            pos = self._positions.get(market_id)
+            if pos is None or pos.closed:
+                return
+            pos.closed = True
+            pos.close_price = 1.0 if won else 0.0
+            pos.close_time = time.time()
+            pos.close_reason = reason
+            if won:
+                self.wins += 1
+            self.cash += pos.current_value
+            logger.info(f"[{self.bot_name}] RESOLVED {market_id[:8]} outcome={'WIN' if won else 'LOSS'} pnl={pos.unrealized_pnl:.2f} cash={self.cash:.2f}")
+            self._closed.append(pos)
+            del self._positions[market_id]
+
+    def resolve_position_loss(self, market_id: str, won: bool, reason: str):
+        """For backwards compat - delegate to resolve_position."""
+        self.resolve_position(market_id, won, reason)
+
     def _close_position(self, pos: Position, reason: str):
         """Internal close — caller holds lock."""
         pos.closed = True
         pos.close_price = pos.current_price
         pos.close_time = time.time()
         pos.close_reason = reason
+        pnl = pos.realized_pnl
         self.cash += pos.current_value
-        if pos.realized_pnl > 0:
+        if pnl > 0:
             self.wins += 1
+        logger.info(f"[{self.bot_name}] CLOSED {pos.market_id[:8]} {pos.outcome} {reason} pnl={pnl:.2f} value={pos.current_value:.2f}")
         self._closed.append(pos)
         del self._positions[pos.market_id]
 

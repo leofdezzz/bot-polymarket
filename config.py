@@ -4,7 +4,7 @@ DEFAULT_BALANCE = 50.0
 TRADE_SIZE_PCT = 0.05          # 5% of portfolio per trade
 MAX_POSITION_SIZE_PCT = 0.15   # Max 15% in one market
 MAX_POSITIONS = 10             # Max open positions per bot
-UPDATE_INTERVAL = 30           # Seconds between strategy runs
+UPDATE_INTERVAL = 10           # Seconds between strategy runs
 DASHBOARD_REFRESH = 3          # Seconds between dashboard updates
 MIN_VOLUME = 500               # Minimum market volume (USDC)
 MIN_LIQUIDITY = 200            # Minimum liquidity
@@ -27,6 +27,6 @@ def parse_args():
         "--interval",
         type=int,
         default=UPDATE_INTERVAL,
-        help=f"Seconds between strategy updates (default: {UPDATE_INTERVAL})",
+        help=f"Seconds between strategy updates (default: {config.UPDATE_INTERVAL})",
     )
     return parser.parse_args()

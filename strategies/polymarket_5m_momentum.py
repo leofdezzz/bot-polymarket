@@ -1,96 +1,128 @@
 """
-Polymarket 5-minute Crypto Direction Strategy:
-Operates ONLY on 5-minute Polymarket markets about BTC/ETH price direction.
-Buys YES when price going up, NO when going down.
+Polymarket 5-minute BTC Up/Down Trading Bot
+Aggressive momentum: follows window delta + tick trend.
+Buys YES when BTC up vs window open, NO when down.
 """
 import logging
+import time
 
-from api.polymarket_client import Market, PolymarketClient
+from api.polymarket_client import Market, PolymarketClient, BinancePrice
 from engine.portfolio import Portfolio
 from strategies.base import BaseStrategy, TradeSignal
 
 logger = logging.getLogger(__name__)
 
-CRYPTO_KEYWORDS = ['btc', 'bitcoin', 'eth', 'ethereum', 'crypto']
-DIRECTION_KEYWORDS = ['up', 'down', 'higher', 'lower', 'above', 'below', 'increase', 'decrease', 'rise', 'fall']
-
-
-def is_crypto_direction_market(market: Market) -> bool:
-    q = market.question.lower()
-    has_crypto = any(k in q for k in CRYPTO_KEYWORDS)
-    has_direction = any(k in q for k in DIRECTION_KEYWORDS)
-    return has_crypto and has_direction
-
 
 class Polymarket5MomentumStrategy(BaseStrategy):
     name = "polymarket_5m_momentum"
-    description = "5min Crypto: BTC/ETH up/down"
-    MIN_CONFIDENCE = 0.3
-    MIN_HISTORY = 2
-    MIN_VOLUME = 10
+    description = "5min BTC Momentum: window delta + tick trend"
+    MIN_CONFIDENCE = 0.25
+    WINDOW_SECONDS = 300
+    SNIPE_OFFSET = 10
 
     def run(self):
-        markets = self.client.get_all_markets()
+        window_ts = self._get_window_ts()
+        secs_to_close = self._secs_to_close(window_ts)
+
+        # Resolve all expired positions first
+        self.client.resolve_all_expired_positions(self.portfolio)
+
+        market = self._find_window_market(window_ts)
+        if market:
+            self.portfolio.check_and_close_expired(market.id, "5min", market.minutes_to_expiry)
+
+        logger.info(f"[5m_momentum] window_ts={window_ts} secs_to_close={secs_to_close}")
+
+        if secs_to_close <= 0:
+            return
+
+        if secs_to_close > self.SNIPE_OFFSET + 30:
+            logger.info(f"[5m_momentum] Too early ({secs_to_close}s remaining)")
+            return
+
+        if not market:
+            market = self._find_window_market(window_ts)
+        if not market:
+            logger.info(f"[5m_momentum] No market found")
+            return
+
         open_ids = {p.market_id for p in self.portfolio.open_positions()}
+        if market.id in open_ids:
+            self.portfolio.update_prices(market.id, market.yes_price)
+            return
 
-        for market in markets:
-            if market.id in open_ids and market.is_fast_market:
-                self.portfolio.update_prices(market.id, market.yes_price)
+        bp = BinancePrice.get_instance()
+        best_score = None
+        best_signal = None
+        deadline = time.time() + max(secs_to_close - 5, 1)
 
-        signals = self.generate_signals(markets)
-        signals.sort(key=lambda s: s.confidence, reverse=True)
+        while time.time() < deadline:
+            open_price, current_price, _ = bp.get_window_info()
+            if open_price > 0:
+                score = self._calculate_score(open_price, current_price, bp)
+                if best_score is None or abs(score) > abs(best_score):
+                    best_score = score
+                    best_signal = self._build_signal(market, score)
+                    if abs(score) >= 4:
+                        break
 
-        for signal in signals:
-            if signal.confidence < self.MIN_CONFIDENCE:
-                continue
-            if signal.market.id in open_ids:
-                continue
+            remaining = self._secs_to_close(window_ts)
+            if remaining <= 5:
+                break
+            time.sleep(2)
+
+        if best_signal and best_signal.confidence >= self.MIN_CONFIDENCE:
+            logger.info(f"[5m_momentum] BUY {best_signal.outcome} @ {best_signal.price:.3f} conf={best_signal.confidence:.2f} reason={best_signal.reason}")
             self.portfolio.buy(
-                market_id=signal.market.id,
-                question=signal.market.question,
-                outcome=signal.outcome,
-                price=signal.price,
-                market_type=signal.market_type,
-                end_date=signal.end_date,
+                market_id=best_signal.market.id,
+                question=best_signal.market.question,
+                outcome=best_signal.outcome,
+                price=best_signal.price,
+                market_type=best_signal.market_type,
+                end_date=best_signal.end_date,
             )
 
     def generate_signals(self, markets: list[Market]) -> list[TradeSignal]:
-        signals = []
-        for m in markets:
-            if m.market_type != "5min":
-                continue
-            if not is_crypto_direction_market(m):
-                continue
-            if not m.is_tradeable_fast(min_volume=self.MIN_VOLUME, min_liquidity=10):
-                continue
+        return []
 
-            history = self.client.history.get(m.id)
-            if len(history) < self.MIN_HISTORY:
-                continue
+    def _get_window_ts(self) -> int:
+        return int(time.time()) - (int(time.time()) % self.WINDOW_SECONDS)
 
-            prices = [h[1] for h in history]
-            price_change = (prices[-1] - prices[0]) / prices[0] if prices[0] > 0 else 0.0
+    def _secs_to_close(self, window_ts: int) -> int:
+        return (window_ts + self.WINDOW_SECONDS) - int(time.time())
 
-            if abs(price_change) < 0.003:
-                continue
+    def _find_window_market(self, window_ts: int) -> Market | None:
+        slug = f"btc-updown-5m-{window_ts}"
+        return self.client.get_fast_market_by_slug(slug)
 
-            conf = min(abs(price_change) / 0.02, 1.0)
+    def _calculate_score(self, open_price: float, current_price: float, bp: BinancePrice) -> float:
+        if open_price == 0:
+            return 0.0
+        delta_pct = (current_price - open_price) / open_price * 100
 
-            q = m.question.lower()
-            if any(w in q for w in ['up', 'higher', 'above', 'increase', 'rise']):
-                outcome = "YES"
-                price = m.yes_price
-                reason = f"UP {price_change:+.1%}"
-            elif any(w in q for w in ['down', 'lower', 'below', 'decrease', 'fall']):
-                outcome = "NO"
-                price = m.no_price
-                reason = f"DOWN {price_change:+.1%}"
-            else:
-                outcome = "YES" if price_change > 0 else "NO"
-                price = m.yes_price if price_change > 0 else m.no_price
-                reason = f"DIR {price_change:+.1%}"
+        if delta_pct > 0.10:
+            window_weight = 7
+        elif delta_pct > 0.05:
+            window_weight = 5
+        elif delta_pct > 0.02:
+            window_weight = 3
+        elif delta_pct > 0.005:
+            window_weight = 1
+        else:
+            window_weight = 0
 
-            signals.append(TradeSignal(m, outcome, price, conf, reason))
+        score = window_weight if delta_pct > 0 else -window_weight
 
-        signals.sort(key=lambda s: s.confidence, reverse=True)
-        return signals
+        tick_trend = bp.get_tick_trend()
+        if abs(tick_trend) > 0.2:
+            score += tick_trend * 2
+
+        return score
+
+    def _build_signal(self, m: Market, score: float) -> TradeSignal:
+        direction = "UP" if score > 0 else "DOWN"
+        conf = min(abs(score) / 7.0, 1.0)
+        outcome = "YES" if score > 0 else "NO"
+        price = m.yes_price if score > 0 else m.no_price
+        reason = f"MOM {direction} score={score:.1f}"
+        return TradeSignal(m, outcome, price, conf, reason)

@@ -344,14 +344,17 @@ function renderPositions(bot) {
     tbody.innerHTML = `<tr><td colspan="5" class="pos-empty">Sin posiciones abiertas</td></tr>`;
     return;
   }
-  tbody.innerHTML = bot.positions.map(p => `
-    <tr>
+  tbody.innerHTML = bot.positions.map(p => {
+    const dirClass = p.outcome === 'YES' ? 'outcome-yes' : 'outcome-no';
+    const dirLabel = p.outcome === 'YES' ? 'UP' : 'DOWN';
+    return `<tr>
       <td title="${p.question}">${trunc(p.question, 26)}</td>
-      <td><span class="${p.outcome === 'YES' ? 'outcome-yes' : 'outcome-no'}">${p.outcome}</span></td>
+      <td><span class="${dirClass}">${dirLabel}</span></td>
       <td class="mono">${p.entry_price.toFixed(3)}</td>
       <td class="mono">${p.current_price.toFixed(3)}</td>
       <td class="mono ${cls(p.pnl)}">${p.pnl >= 0 ? '+' : ''}${fmt$(p.pnl)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function selectBot(name) {

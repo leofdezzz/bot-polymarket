@@ -50,7 +50,7 @@ class Polymarket15MeanRevStrategy(BaseStrategy):
         logger.info(f"[15m_mean] In snipe window - market: {market.id[:12]}... YES:{market.yes_price:.3f} NO:{market.no_price:.3f}")
 
         # Skip extreme prices (market likely resolved or about to resolve)
-        if market.yes_price > 0.92 or market.yes_price < 0.08:
+        if market.yes_price > 0.95 or market.yes_price < 0.05:
             logger.info(f"[15m_mean] Skipping extreme price YES:{market.yes_price:.3f}")
             return
 

@@ -34,7 +34,7 @@ class CLOBClient:
             creds = self._creds
             if creds is None:
                 temp_client = ClobClient(host=CLOB_HOST, chain_id=CHAIN_ID, key=self._key)
-                creds = temp_client.create_or_derive_api_creds()
+                creds = temp_client.create_or_derive_api_key()
 
             self._client = ClobClient(
                 host=CLOB_HOST,

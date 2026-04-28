@@ -77,6 +77,25 @@ class CLOBClient:
             logger.error(f"Error getting balance: {e}")
             return 0.0
 
+    def get_onchain_balance(self, address: str) -> float:
+        try:
+            from web3 import Web3
+            USDC_CONTRACT = "0xC011a73ee8576Fb46F5E1c575732cBCbc3CDE225"
+            RPC_URL = "https://polygon-rpc.com"
+            w3 = Web3(Web3.HTTPProvider(RPC_URL))
+            if not w3.is_connected():
+                return 0.0
+            erc20_abi = '[{"inputs":[{"name":"account"],"outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},{"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"}]}'
+            contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_CONTRACT), abi=erc20_abi)
+            raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
+            decimals = contract.functions.decimals().call()
+            balance = raw_balance / (10 ** decimals)
+            logger.info(f"On-chain USDC balance for {address[:8]}: {balance}")
+            return balance
+        except Exception as e:
+            logger.warning(f"Could not fetch on-chain balance: {e}")
+            return 0.0
+
     def place_market_buy(self, token_id: str, amount_usdc: float, tick_size: str = "0.01", neg_risk: bool = False) -> Optional[str]:
         return self._place_market_order(token_id, amount_usdc, BUY, tick_size, neg_risk)
 

@@ -56,21 +56,15 @@ class CLOBClient:
         try:
             client = self._get_client()
             try:
-                balance = client.get_balance()
-                return float(balance) if balance else 0.0
+                result = client.get_balance_allowance()
+                if isinstance(result, dict):
+                    return float(result.get("balance", 0))
             except AttributeError:
                 pass
             try:
-                result = client._get(f"{CLOB_HOST}/balance")
+                result = client._get(f"{CLOB_HOST}/balance-allowance")
                 if isinstance(result, dict):
                     return float(result.get("balance", 0))
-                return 0.0
-            except Exception:
-                pass
-            try:
-                result = client._get(f"{CLOB_HOST}/me")
-                if isinstance(result, dict):
-                    return float(result.get("balance", result.get("usdc", 0)))
             except Exception:
                 pass
             return 0.0

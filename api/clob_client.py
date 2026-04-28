@@ -62,8 +62,14 @@ class CLOBClient:
                     signature_type=0,
                 )
                 result = client.get_balance_allowance(params=params)
+                logger.info(f"Balance response raw: {result}")
                 if isinstance(result, dict):
-                    return float(result.get("balance", 0))
+                    for key in ["balance", "usdc", "USDC", "collateral", "available"]:
+                        if key in result:
+                            return float(result[key])
+                    if "error" not in result:
+                        logger.warning(f"Unknown balance response structure: {result}")
+                    return 0.0
             except (AttributeError, TypeError, Exception) as e:
                 logger.warning(f"Balance allowance failed: {e}")
             return 0.0

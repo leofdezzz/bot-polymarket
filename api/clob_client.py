@@ -45,7 +45,7 @@ class CLOBClient:
             logger.info(f"CLOB client initialized for address: {self._get_address()[:10]}...")
         return self._client
 
-def get_balance(self) -> float:
+    def get_balance(self) -> float:
         try:
             rpc_urls = [
                 "https://polygon-rpc.com",
@@ -75,11 +75,8 @@ def get_balance(self) -> float:
                     continue
 
             logger.warning("All Web3 RPC attempts failed")
+            return 0.0
 
-        except Exception as e:
-            logger.error(f"Error getting balance: {e}")
-
-        return 0.0
         except Exception as e:
             logger.error(f"Error getting balance: {e}")
             return 0.0

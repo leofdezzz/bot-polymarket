@@ -36,10 +36,26 @@ class CLOBClient:
 
     def _get_client(self) -> ClobClient:
         if self._client is None:
+            from py_clob_client_v2 import ApiCreds
+
+            temp_client = ClobClient(
+                host=CLOB_HOST,
+                chain_id=CHAIN_ID,
+                key=self._key,
+                signature_type=0,
+            )
+            try:
+                creds = temp_client.create_or_derive_api_key()
+                logger.info(f"CLOB API credentials created for address: {self._get_address()[:10]}...")
+            except Exception as e:
+                logger.warning(f"Could not create API credentials: {e}. Using L1 auth only.")
+                creds = None
+
             self._client = ClobClient(
                 host=CLOB_HOST,
                 chain_id=CHAIN_ID,
                 key=self._key,
+                creds=creds,
                 signature_type=0,
             )
             logger.info(f"CLOB client initialized for address: {self._get_address()[:10]}...")

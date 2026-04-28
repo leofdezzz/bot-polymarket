@@ -98,7 +98,6 @@ class CLOBClient:
                     amount=amount_usdc,
                     side=side_str,
                 ),
-                options={"tick_size": "0.01", "neg_risk": False},
                 order_type=OrderType.FOK,
             )
 

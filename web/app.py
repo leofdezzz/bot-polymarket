@@ -55,8 +55,13 @@ def record_history():
                 _pnl_history[t.name] = _pnl_history[t.name][-MAX_HISTORY:]
 
 
+def _base_name(name: str) -> str:
+    return name.replace(" (PAPER)", "").replace(" (LIVE)", "")
+
+
 def _bot_data(t) -> dict:
     pf = t.portfolio
+    base = _base_name(t.name)
     positions = []
     for pos in sorted(pf.open_positions(), key=lambda p: p.unrealized_pnl, reverse=True):
         positions.append({
@@ -72,9 +77,9 @@ def _bot_data(t) -> dict:
     closed = pf.closed_positions()
     realized = sum(p.realized_pnl for p in closed)
     return {
-        "name":        t.name,
+        "name":        pf.bot_name,
         "description": t.strategy.description,
-        "color":       BOT_COLORS.get(t.name, "#ffffff"),
+        "color":       BOT_COLORS.get(base, "#ffffff"),
         "status":      t.status,
         "total_value": round(pf.total_value(), 2),
         "cash":        round(pf.cash, 2),

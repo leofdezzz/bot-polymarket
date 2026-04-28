@@ -47,24 +47,47 @@ class CLOBClient:
 
     def get_balance(self) -> float:
         try:
-            client = self._get_client()
             try:
-                balances = client.get_balances()
-                for token, amount in balances.items():
-                    if token.upper() in ("USDC", "USDC.E", "USDCE"):
-                        return float(amount)
-                if "USDC" in balances:
-                    return float(balances["USDC"])
-                if balances:
-                    return float(list(balances.values())[0])
-            except Exception:
-                pass
+                balances = self._get_client().get_balances()
+                logger.info(f"Balances response: {balances}")
+                if isinstance(balances, dict):
+                    for token, amount in balances.items():
+                        if token.upper() in ("USDC", "USDC.E", "USDCE", "USDC.EUR"):
+                            return float(amount)
+                    if balances:
+                        return float(list(balances.values())[0])
+                elif isinstance(balances, (list, tuple)) and len(balances) > 0:
+                    return float(balances[0]) if balances[0] else 0.0
+            except Exception as e:
+                logger.warning(f"get_balances failed: {e}")
+
             try:
-                result = client._get(f"{CLOB_HOST}/balance-allowance")
+                result = self._get_client()._get(f"{CLOB_HOST}/balance-allowance")
+                logger.info(f"Balance allowance response: {result}")
                 if isinstance(result, dict) and "balance" in result:
                     return float(result["balance"])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"balance-allowance failed: {e}")
+
+            try:
+                from web3 import Web3
+                USDC_CONTRACT = "0xC011a73ee8576Fb46F5E1c575732cBCbc3CDE225"
+                RPC_URL = "https://polygon-rpc.com"
+                w3 = Web3(Web3.HTTPProvider(RPC_URL))
+                if w3.is_connected():
+                    erc20_abi = '[{"inputs":[{"name":"account"},"outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},{"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"}]}'
+                    contract = w3.eth.contract(
+                        address=Web3.to_checksum_address(USDC_CONTRACT),
+                        abi=erc20_abi
+                    )
+                    raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(self._get_address())).call()
+                    decimals = contract.functions.decimals().call()
+                    balance = raw_balance / (10 ** decimals)
+                    logger.info(f"On-chain USDC balance: {balance}")
+                    return balance
+            except Exception as e:
+                logger.warning(f"Web3 balance check failed: {e}")
+
             return 0.0
         except Exception as e:
             logger.error(f"Error getting balance: {e}")

@@ -33,13 +33,13 @@ class CLOBClient:
         if self._client is None:
             creds = self._creds
             if creds is None:
-                temp_client = ClobClient(host=CLOB_HOST, chain=CHAIN_ID, key=self._key)
+                temp_client = ClobClient(host=CLOB_HOST, chain_id=CHAIN_ID, key=self._key)
                 creds = temp_client.create_or_derive_api_creds()
 
             self._client = ClobClient(
                 host=CLOB_HOST,
+                chain_id=CHAIN_ID,
                 key=self._key,
-                chain=CHAIN_ID,
                 creds=creds,
                 signature_type=self._signature_type,
             )

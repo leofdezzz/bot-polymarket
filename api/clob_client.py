@@ -12,6 +12,8 @@ try:
     from py_clob_client_v2.clob_types import MarketOrderArgs, OrderType
     from py_clob_client_v2.order_builder.constants import BUY, SELL
     HAS_CLOB_SDK = True
+    ORDER_TYPE_FOK = OrderType.FOK
+    ORDER_TYPE_FAK = OrderType.FAK
 except ImportError:
     HAS_CLOB_SDK = False
     logger.warning("py-clob-client-v2 not installed, live trading disabled")
@@ -69,14 +71,27 @@ class CLOBClient:
                     side=side,
                 ),
                 options={"tick_size": tick_size, "neg_risk": neg_risk},
-                order_type=OrderType.FOK,
+                order_type=ORDER_TYPE_FAK,
             )
-            if response and "orderID" in response:
-                logger.info(f"Market order placed: {response.get('orderID')} status={response.get('status')}")
-                return response["orderID"]
-            elif response and "orderID" in str(response):
-                return str(response)
-            logger.warning(f"Unexpected market order response: {response}")
+            logger.info(f"Market order raw response: {response}")
+
+            for key in ["orderID", "filledOrderID", "id", "OrderID", "FilledOrderID"]:
+                if isinstance(response, dict) and key in response:
+                    oid = response[key]
+                    if oid:
+                        logger.info(f"Market order key={key}: {oid}")
+                        return str(oid)
+
+            if isinstance(response, dict):
+                for k, v in response.items():
+                    if v and isinstance(v, str) and len(v) > 5:
+                        logger.info(f"Using key={k}: {v}")
+                        return v
+
+            if isinstance(response, str) and len(response) > 5:
+                return response
+
+            logger.warning(f"Could not extract order_id from response: {response}")
             return None
         except Exception as e:
             logger.error(f"Error placing market order: {e}")

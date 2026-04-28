@@ -6,95 +6,93 @@
 <title>PM Trading</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0a0a0f;--surface:#12121a;--border:#1a1a24;--text:#e4e4e7;--muted:#52525b;--green:#22c55e;--red:#ef4444;--paper:#818cf8;--live:#f59e0b}
+:root{
+  --bg:#000;
+  --surface:#111;
+  --border:#222;
+  --text:#fff;
+  --muted:#888;
+  --pos:#00ff00;
+  --neg:#ff3333;
+}
 body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:13px;min-height:100vh}
-.header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
-.logo{font-size:15px;font-weight:700}.logo span{color:var(--paper)}.header-right{display:flex;align-items:center;gap:12px}
-.btn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer}
-.btn:hover{background:var(--border)}
-.btn-paper{background:rgba(129,140,248,0.1);border-color:var(--paper);color:var(--paper)}
-.btn-live{background:rgba(245,158,11,0.1);border-color:var(--live);color:var(--live)}
-.main{padding:20px 24px;display:grid;grid-template-columns:1fr 320px;gap:20px}
-.section{margin-bottom:20px}
-.section-header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
-.label-paper{color:var(--paper)}
-.label-live{color:var(--live)}
-.dot{width:8px;height:8px;border-radius:50%}
-.dot-paper{background:var(--paper)}
-.dot-live{background:var(--live);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;transition:border-color .2s}
-.card:hover{border-color:#333}
-.card.active{border-color:var(--card-color,var(--paper))}
-.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border)}
+.logo{font-size:16px;font-weight:700;letter-spacing:-0.5px}.logo span{color:var(--muted)}
+.header-right{display:flex;align-items:center;gap:20px}
+.clock{font-family:monospace;color:var(--muted);font-size:13px}
+.btn{background:transparent;border:1px solid var(--text);color:var(--text);padding:6px 14px;font-size:12px;cursor:pointer;transition:background .15s}
+.btn:hover{background:#fff;color:#000}
+.main{padding:20px 24px;display:grid;grid-template-columns:1fr 320px;gap:24px}
+.col{}
+.side{display:flex;flex-direction:column;gap:16px}
+.section{margin-bottom:24px}
+.section-header{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.cards{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--surface);border:1px solid var(--border);padding:14px 16px;cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:#444}
+.card.selected{border-color:#fff}
+.card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .card-name{font-size:12px;font-weight:600}
-.card-mode{font-size:10px;padding:2px 6px;border-radius:4px}
-.mode-paper{background:rgba(129,140,248,0.15);color:var(--paper)}
-.mode-live{background:rgba(245,158,11,0.15);color:var(--live)}
-.card-pnl{font-size:22px;font-weight:700;font-family:monospace;margin-bottom:8px}
-.pos{color:var(--green)}.neg{color:var(--red)}.neu{color:var(--muted)}
-.card-meta{display:flex;gap:16px;font-size:11px;color:var(--muted)}
-.card-meta span{color:var(--text)}
-.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
-.card-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px}
-.chart-wrap{height:200px}
-.pos-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.pos-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-.pos-dot{width:6px;height:6px;border-radius:50%}
-.pos-name{font-weight:600;font-size:12px}
+.card-tag{font-size:9px;font-weight:700;letter-spacing:1px;padding:3px 7px;border:1px solid var(--muted);color:var(--muted)}
+.card-tag.PAPER{border-color:#fff;color:#fff}
+.card-tag.LIVE{border-color:#fff;color:#fff}
+.card-pnl{font-size:28px;font-weight:700;font-family:monospace;margin-bottom:10px}
+.p{color:var(--pos)}.n{color:var(--neg)}.m{color:var(--muted)}
+.card-stats{display:flex;gap:20px;font-size:11px;color:var(--muted)}
+.card-stats span{color:var(--text)}
+.card-stats span.div{margin-left:auto}
+.chart-box{background:var(--surface);border:1px solid var(--border);padding:14px}
+.chart-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.chart-wrap{height:180px}
+.pos-box{background:var(--surface);border:1px solid var(--border);overflow:hidden}
+.pos-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.pos-dot{width:6px;height:6px;border-radius:50%;background:#fff}
+.pos-name{font-size:12px;font-weight:600}
 .pos-balance{margin-left:auto;font-family:monospace;font-size:12px}
 .pos-table{width:100%;border-collapse:collapse}
-.pos-table th{padding:8px 12px;text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase;background:rgba(0,0,0,0.2);border-bottom:1px solid var(--border)}
+.pos-table th{padding:8px 12px;text-align:left;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);background:#000}
 .pos-table td{padding:8px 12px;font-size:11px;border-bottom:1px solid var(--border)}
 .pos-table tr:last-child td{border-bottom:none}
-.pos-empty{padding:24px;text-align:center;color:var(--muted)}
-#toast{position:fixed;bottom:20px;right:20px;background:var(--surface);border:1px solid var(--border);padding:10px 16px;border-radius:8px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none}
+.pos-empty{padding:20px;text-align:center;color:var(--muted);font-size:12px}
+#toast{position:fixed;bottom:20px;right:20px;background:#fff;color:#000;padding:10px 16px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.show{opacity:1}
 </style>
 </head>
 <body>
 
 <header class="header">
-  <div class="logo">PM <span>Trading</span></div>
+  <div class="logo">PM<span>Trading</span></div>
   <div class="header-right">
-    <span id="clock" style="font-family:monospace;color:var(--muted)">--:--:--</span>
-    <button class="btn" onclick="resetPaper()" style="background:rgba(129,140,248,0.1);border-color:var(--paper);color:var(--paper)">Reset Paper</button>
+    <span class="clock" id="clock">--:--:--</span>
+    <button class="btn" onclick="resetPaper()">Reset Paper</button>
   </div>
 </header>
 
 <div class="main">
-  <div class="left">
-    <div class="section" id="paper-section">
-      <div class="section-header">
-        <div class="dot dot-paper"></div>
-        <span class="section-label label-paper">Paper Trading</span>
-      </div>
+  <div class="col">
+    <div class="section">
+      <div class="section-header">Paper Trading</div>
       <div class="cards" id="paper-cards"></div>
     </div>
-    <div class="section" id="live-section">
-      <div class="section-header">
-        <div class="dot dot-live"></div>
-        <span class="section-label label-live">Live Trading</span>
-      </div>
+    <div class="section">
+      <div class="section-header">Live Trading</div>
       <div class="cards" id="live-cards"></div>
     </div>
   </div>
-  <div class="right">
-    <div class="chart-card">
-      <div class="card-title">P&L %</div>
+  <div class="side">
+    <div class="chart-box">
+      <div class="chart-title">P&L %</div>
       <div class="chart-wrap"><canvas id="chart"></canvas></div>
     </div>
-    <div class="pos-card" style="margin-top:16px">
+    <div class="pos-box">
       <div class="pos-header">
-        <div class="pos-dot" id="pos-dot" style="background:var(--paper)"></div>
+        <div class="pos-dot" id="pos-dot"></div>
         <div class="pos-name" id="pos-name">—</div>
         <div class="pos-balance" id="pos-balance">—</div>
       </div>
       <table class="pos-table">
-        <thead><tr><th>Mercado</th><th>Dir</th><th>P&L</th></tr></thead>
-        <tbody id="pos-tbody"><tr><td colspan="3" class="pos-empty">Sin posiciones</td></tr></tbody>
+        <thead><tr><th>Market</th><th>Dir</th><th>P&L</th></tr></thead>
+        <tbody id="pos-tbody"><tr><td colspan="3" class="pos-empty">No positions</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -108,14 +106,11 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;fon
 const $=id=>document.getElementById(id);
 let state=null,selected=null,chart=null;
 
-function tick(){
-  $('clock').textContent=new Date().toLocaleTimeString('es-ES',{hour12:false});
-}
-setInterval(tick,1000);tick();
+setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString('es-ES',{hour12:false})},1000);
 
 function fmt$(v){return'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function pct(v){return(v>=0?'+':'')+v.toFixed(2)+'%'}
-function cls(v){return v>0?'pos':v<0?'neg':'neu'}
+function cls(v){return v>0?'p':v<0?'n':'m'}
 function trunc(s,n){return s.length>n?s.slice(0,n-1)+'…':s}
 
 function toast(m){
@@ -126,17 +121,21 @@ function toast(m){
 
 function renderCards(bots,container,mode){
   const filtered=bots.filter(b=>mode==='paper'?b.name.includes('PAPER'):b.name.includes('LIVE'));
-  if(!filtered.length){container.innerHTML='<div style="color:var(--muted);font-size:12px">No hay bots</div>';return}
+  if(!filtered.length){container.innerHTML='<div style="color:var(--muted);font-size:12px;padding:12px 0">No bots</div>';return}
   container.innerHTML=filtered.map(b=>{
-    const color=b.color||'var(--paper)';
     const isActive=selected===b.name;
-    return`<div class="card ${isActive?'active':''}" style="--card-color:${color}" onclick="selectBot('${b.name}')">
-      <div class="card-header">
+    const tagClass=mode==='paper'?'PAPER':'LIVE';
+    return`<div class="card ${isActive?'selected':''}" onclick="selectBot('${b.name}')">
+      <div class="card-top">
         <div class="card-name">${b.name}</div>
-        <div class="card-mode ${mode==='paper'?'mode-paper':'mode-live'}">${mode==='paper'?'PAPER':'LIVE'}</div>
+        <div class="card-tag ${tagClass}">${mode==='paper'?'PAPER':'LIVE'}</div>
       </div>
       <div class="card-pnl ${cls(b.pnl_pct)}">${pct(b.pnl_pct)}</div>
-      <div class="card-meta">pos:<span>${b.open_count}</span> trades:<span>${b.trades}</span> win:<span>${b.win_rate}%</span></div>
+      <div class="card-stats">
+        <span>pos:<b>${b.open_count}</b></span>
+        <span>trades:<b>${b.trades}</b></span>
+        <span>win:<b>${b.win_rate}%</b></span>
+      </div>
     </div>`;
   }).join('');
 }
@@ -146,20 +145,19 @@ function render(){
   renderCards(state.bots,$('paper-cards'),'paper');
   renderCards(state.bots,$('live-cards'),'live');
   if(!selected&&state.bots.length){
-    selected=[...state.bots].sort((a,b)=>b.pnl-a.pnl)[0].name;
+    selected=state.bots[0].name;
   }
   const bot=state.bots.find(b=>b.name===selected);
   if(bot){
-    $('pos-dot').style.background=bot.color||'var(--paper)';
     $('pos-name').textContent=bot.name;
     $('pos-balance').textContent=fmt$(bot.total_value);
     const tb=$('pos-tbody');
     if(!bot.positions.length){
-      tb.innerHTML='<tr><td colspan="3" class="pos-empty">Sin posiciones</td></tr>';
+      tb.innerHTML='<tr><td colspan="3" class="pos-empty">No positions</td></tr>';
     } else {
       tb.innerHTML=bot.positions.map(p=>{
-        const dir=p.outcome==='YES'?'<span style="color:#06b6d4">UP</span>':'<span style="color:#a855f7">DOWN</span>';
-        return`<tr><td>${trunc(p.question,20)}</td><td>${dir}</td><td class="${cls(p.pnl)}">${p.pnl>=0?'+':''}${fmt$(p.pnl)}</td></tr>`;
+        const dir=p.outcome==='YES'?'<span style="color:#00ff00">UP</span>':'<span style="color:#ff3333">DOWN</span>';
+        return`<tr><td>${trunc(p.question,22)}</td><td>${dir}</td><td class="${cls(p.pnl)}">${p.pnl>=0?'+':''}${fmt$(p.pnl)}</td></tr>`;
       }).join('');
     }
   }
@@ -181,8 +179,8 @@ function initChart(){
       interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false}},
       scales:{
-        x:{type:'time',time:{unit:'minute',displayFormats:{minute:'HH:mm'}},
-        y:{ticks:{callback:v=>pct(v)}}
+        x:{type:'time',time:{unit:'minute',displayFormats:{minute:'HH:mm'}},grid:{color:'#222'},ticks:{color:'#888'}},
+        y:{grid:{color:'#222'},ticks:{color:'#888',callback:v=>pct(v)}}
       }
     }
   });
@@ -193,7 +191,7 @@ function updateChart(){
   fetch('/api/history').then(r=>r.json()).then(h=>{
     Object.entries(h).forEach(([name,pts])=>{
       const data=pts.map(p=>({x:p.ts,y:p.pnl_pct}));
-      const color=state.bots.find(b=>b.name===name)?.color||'#888';
+      const color='#fff';
       const i=chart.data.datasets.findIndex(d=>d.label===name);
       if(i===-1){
         chart.data.datasets.push({label:name,data,borderColor:color,borderWidth:1.5,pointRadius:0,tension:0.3});
@@ -206,9 +204,9 @@ function updateChart(){
 }
 
 async function resetPaper(){
-  if(!confirm('Resetear solo bots PAPER?'))return;
+  if(!confirm('Reset paper bots?'))return;
   await fetch('/api/reset-paper',{method:'POST'});
-  toast('Paper traders reseteados');
+  toast('Paper resetted');
   selected=null;
   chart.data.datasets=[];
   chart.update();
@@ -219,12 +217,11 @@ function fetchState(){
   fetch('/api/state').then(r=>r.json()).then(s=>{
     state=s;
     render();
-  });
+  }).catch(()=>{});
 }
 
 initChart();
 fetchState();
-fetch('/api/history').then(r=>r.json()).then(h=>{updateChart();});
 setInterval(fetchState,3000);
 setInterval(updateChart,5000);
 </script>

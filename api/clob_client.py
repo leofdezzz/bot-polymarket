@@ -8,9 +8,8 @@ CHAIN_ID = 137
 
 try:
     from py_clob_client_v2.client import ClobClient
-    from py_clob_client_v2.clob_types import MarketOrderArgsV2
-    from py_clob_client_v2.order_builder.constants import BUY, SELL, Side as CLobSide
-    from py_clob_client_v2.order_builder import OrderType
+    from py_clob_client_v2.clob_types import MarketOrderArgsV2, OrderType
+    from py_clob_client_v2.order_builder.constants import BUY, SELL
     HAS_SDK = True
 except ImportError:
     HAS_SDK = False
@@ -80,16 +79,14 @@ class CLOBClient:
     def _place_market_order(self, token_id: str, amount_usdc: float, side) -> Optional[str]:
         try:
             client = self._get_client()
-            clob_side = CLobSide.BUY if side == BUY else CLobSide.SELL
-
-            order_args = MarketOrderArgsV2(
-                token_id=token_id,
-                amount=amount_usdc,
-                side=clob_side,
-            )
+            side_str = "BUY" if side == BUY else "SELL"
 
             response = client.create_and_post_market_order(
-                order_args=order_args,
+                order_args=MarketOrderArgsV2(
+                    token_id=token_id,
+                    amount=amount_usdc,
+                    side=side_str,
+                ),
                 options={"tick_size": "0.01", "neg_risk": False},
                 order_type=OrderType.FOK,
             )

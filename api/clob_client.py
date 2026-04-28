@@ -5,35 +5,63 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 CLOB_HOST = "https://clob.polymarket.com"
+RELAYER_HOST = "https://relayer-v2.polymarket.com"
 CHAIN_ID = 137
 
 try:
     from py_clob_client_v2.client import ClobClient
     from py_clob_client_v2.clob_types import MarketOrderArgs, OrderType
-    from py_clob_client_v2.clob_types import BalanceAllowanceParams, AssetType
     from py_clob_client_v2.order_builder.constants import BUY, SELL
-    HAS_CLOB_SDK = True
-    ORDER_TYPE_FOK = OrderType.FOK
-    ORDER_TYPE_FAK = OrderType.FAK
+    from py_builder_relayer_client.client import RelayClient
+    HAS_RELAYER_SDK = True
 except ImportError:
-    HAS_CLOB_SDK = False
-    logger.warning("py-clob-client-v2 not installed, live trading disabled")
+    HAS_RELAYER_SDK = False
+    try:
+        from py_clob_client_v2.client import ClobClient
+        from py_clob_client_v2.clob_types import MarketOrderArgs, OrderType
+        from py_clob_client_v2.order_builder.constants import BUY, SELL
+        HAS_CLOB_SDK = True
+    except ImportError:
+        HAS_CLOB_SDK = False
+        logger.warning("No Polymarket SDK installed. Run: pip install py-clob-client-v2 py-builder-relayer-client")
 
 
 class CLOBClient:
-    def __init__(self, private_key: str, api_creds: Optional[dict] = None):
-        if not HAS_CLOB_SDK:
-            raise RuntimeError("py-clob-client-v2 not installed. Run: pip install py-clob-client-v2")
-
+    def __init__(self, private_key: str, api_creds: Optional[dict] = None,
+                 relayer_api_key: str = "", relayer_secret: str = "", relayer_passphrase: str = ""):
         self._key = private_key
         self._creds = api_creds
-        self._client: Optional[ClobClient] = None
+        self._client = None
+        self._relayer = None
         self._signature_type = 0
+        self._relayer_api_key = relayer_api_key
+        self._relayer_secret = relayer_secret
+        self._relayer_passphrase = relayer_passphrase
+        self._using_relayer = bool(relayer_api_key and relayer_secret and relayer_passphrase)
 
-    def _get_client(self) -> ClobClient:
+        if not self._using_relayer and not HAS_RELAYER_SDK:
+            if not HAS_CLOB_SDK:
+                raise RuntimeError("No SDK available. Install: pip install py-clob-client-v2")
+
+    def _get_relayer_client(self):
+        if self._relayer is None:
+            if not self._using_relayer:
+                raise RuntimeError("Relayer credentials not configured")
+            self._relayer = RelayClient(
+                host=RELAYER_HOST,
+                chain=CHAIN_ID,
+                signer=self._key,
+                relayer_api_key=self._relayer_api_key,
+                relayer_api_key_address=self._get_address(),
+            )
+            logger.info("Relayer client initialized")
+        return self._relayer
+
+    def _get_clob_client(self):
         if self._client is None:
             creds = self._creds
             if creds is None:
+                from py_clob_client_v2.client import ClobClient
                 temp_client = ClobClient(host=CLOB_HOST, chain_id=CHAIN_ID, key=self._key)
                 try:
                     creds = temp_client.derive_api_key()
@@ -42,7 +70,6 @@ class CLOBClient:
                         creds = temp_client.create_api_key()
                     except Exception:
                         creds = None
-
             self._client = ClobClient(
                 host=CLOB_HOST,
                 chain_id=CHAIN_ID,
@@ -53,47 +80,45 @@ class CLOBClient:
             logger.info("CLOB client initialized")
         return self._client
 
+    def _get_address(self) -> str:
+        try:
+            from eth_account import Account
+            account = Account.from_key(self._key)
+            return account.address
+        except Exception:
+            return ""
+
     def get_balance(self) -> float:
         try:
-            client = self._get_client()
-            try:
-                params = BalanceAllowanceParams(
-                    asset_type=AssetType.COLLATERAL,
-                    signature_type=0,
-                )
-                result = client.get_balance_allowance(params=params)
-                logger.info(f"Balance response raw: {result}")
-                if isinstance(result, dict):
-                    for key in ["balance", "usdc", "USDC", "collateral", "available"]:
-                        if key in result:
-                            return float(result[key])
-                    if "error" not in result:
-                        logger.warning(f"Unknown balance response structure: {result}")
-                    return 0.0
-            except (AttributeError, TypeError, Exception) as e:
-                logger.warning(f"Balance allowance failed: {e}")
-            return 0.0
+            if self._using_relayer:
+                client = self._get_relayer_client()
+                try:
+                    result = client.get_balance()
+                    if isinstance(result, dict):
+                        return float(result.get("balance", 0))
+                    return float(result) if result else 0.0
+                except Exception:
+                    pass
+                try:
+                    result = client._get(f"{RELAYER_HOST}/balance")
+                    if isinstance(result, dict):
+                        return float(result.get("balance", 0))
+                except Exception:
+                    pass
+                return 0.0
+            else:
+                client = self._get_clob_client()
+                try:
+                    from py_clob_client_v2.clob_types import BalanceAllowanceParams, AssetType
+                    params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL, signature_type=0)
+                    result = client.get_balance_allowance(params=params)
+                    if isinstance(result, dict):
+                        return float(result.get("balance", 0))
+                except Exception:
+                    pass
+                return 0.0
         except Exception as e:
             logger.error(f"Error getting balance: {e}")
-            return 0.0
-
-    def get_onchain_balance(self, address: str) -> float:
-        try:
-            from web3 import Web3
-            USDC_CONTRACT = "0xC011a73ee8576Fb46F5E1c575732cBCbc3CDE225"
-            RPC_URL = "https://polygon-rpc.com"
-            w3 = Web3(Web3.HTTPProvider(RPC_URL))
-            if not w3.is_connected():
-                return 0.0
-            erc20_abi = '[{"inputs":[{"name":"account"],"outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},{"name":"decimals","outputs":[{"type":"uint8"}],"stateMutability":"view","type":"function"}]}'
-            contract = w3.eth.contract(address=Web3.to_checksum_address(USDC_CONTRACT), abi=erc20_abi)
-            raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
-            decimals = contract.functions.decimals().call()
-            balance = raw_balance / (10 ** decimals)
-            logger.info(f"On-chain USDC balance for {address[:8]}: {balance}")
-            return balance
-        except Exception as e:
-            logger.warning(f"Could not fetch on-chain balance: {e}")
             return 0.0
 
     def place_market_buy(self, token_id: str, amount_usdc: float, tick_size: str = "0.01", neg_risk: bool = False) -> Optional[str]:
@@ -104,35 +129,37 @@ class CLOBClient:
 
     def _place_market_order(self, token_id: str, amount_usdc: float, side, tick_size: str, neg_risk: bool) -> Optional[str]:
         try:
-            client = self._get_client()
-            response = client.create_and_post_market_order(
-                order_args=MarketOrderArgs(
+            if self._using_relayer:
+                client = self._get_relayer_client()
+                response = client.create_market_order(
                     token_id=token_id,
                     amount=amount_usdc,
                     side=side,
-                ),
-                options={"tick_size": tick_size, "neg_risk": neg_risk},
-                order_type=ORDER_TYPE_FAK,
-            )
-            logger.info(f"Market order raw response: {response}")
-
-            for key in ["orderID", "filledOrderID", "id", "OrderID", "FilledOrderID"]:
-                if isinstance(response, dict) and key in response:
-                    oid = response[key]
-                    if oid:
-                        logger.info(f"Market order key={key}: {oid}")
-                        return str(oid)
-
+                )
+            else:
+                client = self._get_clob_client()
+                from py_clob_client_v2.clob_types import MarketOrderArgsV2
+                from py_clob_client_v2.order_builder.constants import Side as CLobSide
+                clob_side = CLobSide.BUY if side == BUY else CLobSide.SELL
+                response = client.create_and_post_market_order(
+                    order_args=MarketOrderArgsV2(
+                        token_id=token_id,
+                        amount=amount_usdc,
+                        side=clob_side,
+                    ),
+                    options={"tick_size": tick_size, "neg_risk": neg_risk},
+                    order_type=OrderType.FOK,
+                )
+            logger.info(f"Market order response: {response}")
             if isinstance(response, dict):
-                for k, v in response.items():
-                    if v and isinstance(v, str) and len(v) > 5:
-                        logger.info(f"Using key={k}: {v}")
-                        return v
-
-            if isinstance(response, str) and len(response) > 5:
+                for key in ["orderID", "filledOrderID", "id", "OrderID"]:
+                    if key in response and response[key]:
+                        return str(response[key])
+                if "error" in response:
+                    logger.error(f"Order error: {response['error']}")
+            elif isinstance(response, str) and len(response) > 5:
                 return response
-
-            logger.warning(f"Could not extract order_id from response: {response}")
+            logger.warning(f"Could not extract order_id from: {response}")
             return None
         except Exception as e:
             logger.error(f"Error placing market order: {e}")
@@ -140,8 +167,12 @@ class CLOBClient:
 
     def cancel_order(self, order_id: str) -> bool:
         try:
-            client = self._get_client()
-            result = client.cancel_order(order_id)
+            if self._using_relayer:
+                client = self._get_relayer_client()
+                result = client.cancel_order(order_id)
+            else:
+                client = self._get_clob_client()
+                result = client.cancel_order(order_id)
             logger.info(f"Cancel order {order_id}: {result}")
             return True
         except Exception as e:
@@ -150,7 +181,9 @@ class CLOBClient:
 
     def get_open_orders(self) -> list:
         try:
-            client = self._get_client()
+            if self._using_relayer:
+                return []
+            client = self._get_clob_client()
             return client.get_orders() or []
         except Exception as e:
             logger.error(f"Error getting open orders: {e}")
@@ -158,20 +191,10 @@ class CLOBClient:
 
     def get_filled_orders(self, token_id: Optional[str] = None) -> list:
         try:
-            client = self._get_client()
-            trades = client.get_trades(token_id=token_id) or []
-            return trades
+            if self._using_relayer:
+                return []
+            client = self._get_clob_client()
+            return client.get_trades(token_id=token_id) or []
         except Exception as e:
             logger.error(f"Error getting trades: {e}")
             return []
-
-    def get_token_balance(self, token_id: str) -> float:
-        try:
-            client = self._get_client()
-            pos = client.get_positions(token_id=token_id)
-            if pos:
-                return float(pos.get("balance", 0))
-            return 0.0
-        except Exception as e:
-            logger.error(f"Error getting token balance for {token_id}: {e}")
-            return 0.0

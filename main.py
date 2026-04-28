@@ -208,7 +208,12 @@ def main():
     if is_live_mode:
         print(f"  Iniciando modo LIVE con balance: ${_live_balance:,.2f}")
         try:
-            _clob_client = CLOBClient(private_key=args.private_key)
+            _clob_client = CLOBClient(
+                private_key=args.private_key,
+                relayer_api_key=args.relayer_key,
+                relayer_secret=args.relayer_secret,
+                relayer_passphrase=args.relayer_passphrase,
+            )
             live_bal = _clob_client.get_balance()
             print(f"  Balance on-chain: ${live_bal:.2f} USDC")
             _live_traders = build_live_traders(_live_balance, _client, _clob_client)

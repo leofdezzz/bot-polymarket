@@ -8,7 +8,7 @@ CHAIN_ID = 137
 
 try:
     from py_clob_client_v2.client import ClobClient
-    from py_clob_client_v2.clob_types import MarketOrderArgsV2, OrderType
+    from py_clob_client_v2.clob_types import MarketOrderArgsV2, OrderType, AssetType
     from py_clob_client_v2.order_builder.constants import BUY, SELL
     HAS_SDK = True
 except ImportError:
@@ -97,6 +97,25 @@ class CLOBClient:
             logger.error(f"Error getting balance: {e}")
             return 0.0
 
+    def check_and_approve(self, token_id: str, amount: float) -> bool:
+        """Check allowance and approve USDC for CLOB trading if needed."""
+        try:
+            client = self._get_client()
+            params = {"token_id": token_id, "asset_type": AssetType.COLLATERAL}
+            allowance = client.get_balance_allowance(params)
+            logger.info(f"Current allowance for {token_id}: {allowance}")
+
+            if float(allowance.get("allowance", 0)) < amount:
+                logger.info(f"Approving USDC for trading: {amount}")
+                update_params = {"token_id": token_id, "asset_type": AssetType.COLLATERAL}
+                result = client.update_balance_allowance(update_params)
+                logger.info(f"Approval result: {result}")
+                return True
+            return True
+        except Exception as e:
+            logger.error(f"Error checking/approving allowance: {e}")
+            return False
+
     def place_market_buy(self, token_id: str, amount_usdc: float) -> Optional[str]:
         return self._place_market_order(token_id, amount_usdc, BUY)
 
@@ -105,6 +124,8 @@ class CLOBClient:
 
     def _place_market_order(self, token_id: str, amount_usdc: float, side) -> Optional[str]:
         try:
+            self.check_and_approve(token_id, amount_usdc)
+
             client = self._get_client()
             side_str = "BUY" if side == BUY else "SELL"
 

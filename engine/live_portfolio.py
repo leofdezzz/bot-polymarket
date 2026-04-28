@@ -96,7 +96,7 @@ class LivePortfolio:
                 logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - insufficient cash ${self.cash:.2f} < ${trade_cash:.2f}")
                 return None
             if open_count >= config.MAX_POSITIONS:
-                logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - max positions reached ({open_count})")
+                logger.debug(f"[{self.bot_name}] SKIP {market_id[:8]} - max positions reached ({open_count})")
                 return None
             if price <= 0:
                 logger.info(f"[{self.bot_name}] SKIP {market_id[:8]} - invalid price {price}")

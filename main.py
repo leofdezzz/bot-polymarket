@@ -206,11 +206,19 @@ def main():
             restore_portfolio(t.portfolio, saved_portfolios[t.name])
 
     if is_live_mode:
-        print(f"  Iniciando modo LIVE con balance: ${_live_balance:,.2f}")
+        print(f"  Iniciando modo LIVE")
         try:
             _clob_client = CLOBClient(private_key=args.private_key)
             live_bal = _clob_client.get_balance()
-            print(f"  Balance on-chain: ${live_bal:.2f} USDC")
+            print(f"  Balance on-chain detectado: ${live_bal:.2f} USDC")
+            if live_bal > 0:
+                _live_balance = live_bal
+                print(f"  Usando balance real: ${_live_balance:.2f}")
+            elif args.live_balance > 0:
+                _live_balance = args.live_balance
+                print(f"  Usando balance override: ${_live_balance:.2f}")
+            else:
+                print(f"  WARNING: No se detecto balance, usando 0")
             _live_traders = build_live_traders(_live_balance, _client, _clob_client)
         except Exception as e:
             print(f"  ERROR inicializando CLOB client: {e}")

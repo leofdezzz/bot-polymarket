@@ -29,8 +29,8 @@ def parse_args():
     parser.add_argument(
         "--live-balance",
         type=float,
-        default=DEFAULT_LIVE_BALANCE,
-        help=f"Initial live balance in USDC for real trading (default: {DEFAULT_LIVE_BALANCE})",
+        default=0.0,
+        help=f"Override live balance if auto-detect fails (default: auto-detect)",
     )
     parser.add_argument(
         "--interval",

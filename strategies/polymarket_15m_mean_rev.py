@@ -2,6 +2,7 @@
 Polymarket 15-minute Mean Reversion Strategy:
 Contrarian - bets against strong momentum when BTC moves > 0.1% from open.
 Thesis: in 15min windows, sharp moves often overextend and reverse.
+Supports both paper and live trading modes.
 """
 import logging
 import time
@@ -72,13 +73,29 @@ class Polymarket15MeanRevStrategy(BaseStrategy):
 
         if best_signal and best_signal.confidence >= self.MIN_CONFIDENCE:
             logger.info(f"[15m_mean] BUY {best_signal.outcome} @ {best_signal.price:.3f} conf={best_signal.confidence:.2f} reason={best_signal.reason}")
+            self._execute_buy(best_signal)
+
+    def _execute_buy(self, signal: TradeSignal):
+        is_live = hasattr(self.portfolio, 'clob') and self.portfolio.clob is not None
+        if is_live:
             self.portfolio.buy(
-                market_id=best_signal.market.id,
-                question=best_signal.market.question,
-                outcome=best_signal.outcome,
-                price=best_signal.price,
-                market_type=best_signal.market_type,
-                end_date=best_signal.end_date,
+                market_id=signal.market.id,
+                question=signal.market.question,
+                outcome=signal.outcome,
+                price=signal.price,
+                market_type=signal.market_type,
+                end_date=signal.end_date,
+                yes_token=signal.market.yes_token,
+                no_token=signal.market.no_token,
+            )
+        else:
+            self.portfolio.buy(
+                market_id=signal.market.id,
+                question=signal.market.question,
+                outcome=signal.outcome,
+                price=signal.price,
+                market_type=signal.market_type,
+                end_date=signal.end_date,
             )
 
     def generate_signals(self, markets: list[Market]) -> list[TradeSignal]:

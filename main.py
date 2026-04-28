@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Polymarket Paper Trading Simulator
-5 bots con estrategias distintas + dashboard web + persistencia de estado.
+Polymarket Trading Bot
+Supports both paper trading (simulated) and live trading (real money).
 
-Uso:
-    python main.py                     # $1000 balance, puerto 5000
-    python main.py --balance 5000
-    python main.py --balance 500 --port 8080 --interval 60
+Usage:
+    python main.py                                             # Paper only, $50 balance
+    python main.py --live --private-key 0x... --live-balance 10  # Live trading
+    python main.py --balance 100 --live --private-key 0x... --live-balance 10  # Both modes
 """
 import logging
 import signal
@@ -16,8 +16,11 @@ import time
 
 import config
 from api.polymarket_client import PolymarketClient
+from api.clob_client import CLOBClient
 from engine.paper_trader import PaperTrader
+from engine.live_trader import LiveTrader
 from engine.portfolio import Portfolio
+from engine.live_portfolio import LivePortfolio
 from engine.persistence import (
     save_all, load_portfolios, load_history,
     restore_portfolio, reset_state,
@@ -33,12 +36,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s: [%(name)s] %(message)s",
     handlers=[
-        logging.FileHandler("paper_trader.log"),
+        logging.FileHandler("trading.log"),
         logging.StreamHandler(sys.stdout),
     ],
 )
 
-STRATEGY_CLASSES = [
+PAPER_STRATEGY_CLASSES = [
     ContrarianStrategy,
     Polymarket5MomentumStrategy,
     Polymarket5RSIStrategy,
@@ -46,16 +49,23 @@ STRATEGY_CLASSES = [
     Polymarket15MeanRevStrategy,
 ]
 
+LIVE_STRATEGY_CLASSES = [
+    Polymarket15MeanRevStrategy,
+]
+
 _client: PolymarketClient | None = None
-_traders: list[PaperTrader] = []
-_initial_balance: float = 1000.0
+_clob_client: CLOBClient | None = None
+_paper_traders: list[PaperTrader] = []
+_live_traders: list[LiveTrader] = []
+_initial_balance: float = 50.0
+_live_balance: float = 10.0
 _interval: int = config.UPDATE_INTERVAL
 _stop_event = threading.Event()
 
 
-def build_traders(initial_balance: float, client: PolymarketClient) -> list[PaperTrader]:
+def build_paper_traders(initial_balance: float, client: PolymarketClient) -> list[PaperTrader]:
     traders = []
-    for cls in STRATEGY_CLASSES:
+    for cls in PAPER_STRATEGY_CLASSES:
         portfolio = Portfolio(initial_balance=initial_balance, bot_name=cls.name)
         strategy = cls(client=client, portfolio=portfolio)
         trader = PaperTrader(strategy=strategy, interval=_interval)
@@ -63,30 +73,44 @@ def build_traders(initial_balance: float, client: PolymarketClient) -> list[Pape
     return traders
 
 
-def start_traders(traders: list[PaperTrader]):
+def build_live_traders(initial_balance: float, client: PolymarketClient, clob: CLOBClient) -> list[LiveTrader]:
+    traders = []
+    for cls in LIVE_STRATEGY_CLASSES:
+        portfolio = LivePortfolio(initial_balance=initial_balance, bot_name=cls.name + "_live", clob_client=clob)
+        strategy = cls(client=client, portfolio=portfolio)
+        trader = LiveTrader(strategy=strategy, interval=_interval)
+        traders.append(trader)
+    return traders
+
+
+def start_traders(traders):
     for t in traders:
         t.start()
 
 
-def stop_traders(traders: list[PaperTrader]):
+def stop_traders(traders):
     for t in traders:
         t.stop()
 
 
 def save_loop():
-    """Guarda estado en disco cada 60 segundos."""
     while not _stop_event.is_set():
         _stop_event.wait(timeout=60)
         if not _stop_event.is_set():
-            save_all(_traders, web_app.get_history())
+            all_traders = _paper_traders + _live_traders
+            save_all(all_traders, web_app.get_history())
 
 
 def resolve_loop():
-    """Resuelve posiciones expiradas cada 15 segundos."""
     while not _stop_event.is_set():
         _stop_event.wait(timeout=15)
         if not _stop_event.is_set():
-            for t in _traders:
+            for t in _paper_traders:
+                try:
+                    t.strategy.client.resolve_all_expired_positions(t.portfolio)
+                except Exception as e:
+                    logger.warning(f"[{t.name}] resolve error: {e}")
+            for t in _live_traders:
                 try:
                     t.strategy.client.resolve_all_expired_positions(t.portfolio)
                 except Exception as e:
@@ -94,59 +118,57 @@ def resolve_loop():
 
 
 def history_loop():
-    """Registra snapshot de P&L cada 5 segundos."""
     while not _stop_event.is_set():
         web_app.record_history()
         _stop_event.wait(timeout=5)
 
 
-def restart_callback(new_balance: float, clear: bool = False):
-    global _traders, _initial_balance
+def restart_callback(new_balance: float, new_live_balance: float, clear: bool = False):
+    global _paper_traders, _live_traders, _initial_balance, _live_balance
     _initial_balance = new_balance
-    stop_traders(_traders)
+    _live_balance = new_live_balance
+    stop_traders(_paper_traders)
+    stop_traders(_live_traders)
     if clear:
         reset_state()
-    _traders = build_traders(new_balance, _client)
+    _paper_traders = build_paper_traders(new_balance, _client)
+    if _clob_client:
+        _live_traders = build_live_traders(new_live_balance, _client, _clob_client)
     saved = {} if clear else load_portfolios()
-    for t in _traders:
+    for t in _paper_traders:
         if t.name in saved:
             restore_portfolio(t.portfolio, saved[t.name])
     history = {} if clear else load_history()
-    web_app.init(_traders, new_balance, restart_callback, history)
-    for t in _traders:
+    web_app.init(_paper_traders + _live_traders, new_balance, new_live_balance, restart_callback, history)
+    for t in _paper_traders:
         try:
             t.strategy.run()
         except Exception:
             pass
-    start_traders(_traders)
-    print(f"[{'reset' if clear else 'restart'}] Balance: ${new_balance:,.2f}")
-
-
-def parse_args():
-    import argparse
-    parser = argparse.ArgumentParser(description="Polymarket Paper Trading Simulator")
-    parser.add_argument("--balance", type=float, default=config.DEFAULT_BALANCE,
-                        help=f"Balance inicial por bot en USDC (default: {config.DEFAULT_BALANCE})")
-    parser.add_argument("--interval", type=int, default=config.UPDATE_INTERVAL,
-                        help=f"Segundos entre actualizaciones (default: {config.UPDATE_INTERVAL})")
-    parser.add_argument("--port", type=int, default=5000,
-                        help="Puerto del dashboard web (default: 5000)")
-    parser.add_argument("--reset", action="store_true",
-                        help="Limpiar estado guardado y empezar desde cero")
-    args, unknown = parser.parse_known_args()
-    if unknown:
-        print(f"  Aviso: argumentos ignorados: {unknown}")
-    return args
+    for t in _live_traders:
+        try:
+            t.strategy.run()
+        except Exception:
+            pass
+    start_traders(_paper_traders)
+    start_traders(_live_traders)
+    mode = "reset" if clear else "restart"
+    print(f"[{mode}] Paper balance: ${new_balance:,.2f} | Live balance: ${new_live_balance:,.2f}")
 
 
 def main():
-    global _client, _traders, _interval, _initial_balance
+    global _client, _clob_client, _paper_traders, _live_traders
+    global _interval, _initial_balance, _live_balance
 
-    args = parse_args()
+    args = config.parse_args()
     _interval = args.interval
     _initial_balance = args.balance
+    _live_balance = args.live_balance
 
-    print(f"\nPolymarket Paper Trading Simulator")
+    is_live_mode = args.live and bool(args.private_key)
+
+    print(f"\nPolymarket Trading Bot")
+    print(f"  Mode: {'DUAL (paper + live)' if is_live_mode else 'PAPER ONLY'}")
     print(f"  Conectando a Polymarket API...")
 
     _client = PolymarketClient()
@@ -173,45 +195,65 @@ def main():
     if saved_portfolios:
         first = next(iter(saved_portfolios.values()), {})
         _initial_balance = first.get("initial_balance", args.balance)
-        print(f"  Estado anterior restaurado (balance: ${_initial_balance:,.2f})")
+        print(f"  Estado anterior restaurado (paper balance: ${_initial_balance:,.2f})")
     else:
-        print(f"  Sin estado previo — balance inicial: ${_initial_balance:,.2f}")
+        print(f"  Sin estado previo — paper balance: ${_initial_balance:,.2f}")
 
-    _traders = build_traders(_initial_balance, _client)
+    _paper_traders = build_paper_traders(_initial_balance, _client)
 
-    # Restaura portfolios guardados
-    for t in _traders:
+    for t in _paper_traders:
         if t.name in saved_portfolios:
             restore_portfolio(t.portfolio, saved_portfolios[t.name])
 
-    web_app.init(_traders, _initial_balance, restart_callback, saved_history)
+    if is_live_mode:
+        print(f"  Iniciando modo LIVE con balance: ${_live_balance:,.2f}")
+        try:
+            _clob_client = CLOBClient(private_key=args.private_key)
+            live_bal = _clob_client.get_balance()
+            print(f"  Balance on-chain: ${live_bal:.2f} USDC")
+            _live_traders = build_live_traders(_live_balance, _client, _clob_client)
+        except Exception as e:
+            print(f"  ERROR inicializando CLOB client: {e}")
+            print(f"  Continuando en modo PAPER ONLY")
+            _live_traders = []
+            is_live_mode = False
+    else:
+        _live_traders = []
+
+    web_app.init(_paper_traders + _live_traders, _initial_balance, _live_balance, restart_callback, saved_history)
 
     def shutdown(signum, frame):
         print("\nGuardando estado...")
         _stop_event.set()
-        stop_traders(_traders)
-        save_all(_traders, web_app.get_history())
+        stop_traders(_paper_traders)
+        stop_traders(_live_traders)
+        save_all(_paper_traders + _live_traders, web_app.get_history())
         print("Estado guardado. Hasta luego.")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    # Hilos de background
     threading.Thread(target=history_loop, daemon=True, name="history").start()
-    threading.Thread(target=save_loop,    daemon=True, name="saver").start()
+    threading.Thread(target=save_loop, daemon=True, name="saver").start()
     threading.Thread(target=resolve_loop, daemon=True, name="resolver").start()
 
-    # Primera ronda de estrategias
     print(f"  Ejecutando estrategias...")
-    for t in _traders:
+    for t in _paper_traders:
         try:
             t.strategy.run()
         except Exception as e:
             print(f"    {t.name}: {e}")
 
-    start_traders(_traders)
-    print(f"  {len(_traders)} bots activos")
+    for t in _live_traders:
+        try:
+            t.strategy.run()
+        except Exception as e:
+            print(f"    {t.name}: {e}")
+
+    start_traders(_paper_traders)
+    start_traders(_live_traders)
+    print(f"  {len(_paper_traders)} bots paper | {len(_live_traders)} bots live activos")
     print(f"\n  Dashboard: http://localhost:{args.port}")
     print(f"  Ctrl+C para guardar y salir\n")
 

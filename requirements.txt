@@ -2,3 +2,5 @@ requests>=2.31.0
 rich>=13.7.0
 flask>=3.0.0
 websocket-client>=1.7.0
+py-clob-client-v2>=0.0.0
+web3>=6.0.0

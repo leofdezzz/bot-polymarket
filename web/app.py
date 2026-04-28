@@ -6,12 +6,13 @@ app = Flask(__name__)
 
 _traders = []
 _initial_balance = 1000.0
+_initial_live_balance = 10.0
 _pnl_history: dict[str, list[dict]] = {}
 _history_lock = threading.Lock()
 _start_time = time.time()
 _restart_callback = None
 
-MAX_HISTORY = 2000  # ~2h45m a 5s por punto
+MAX_HISTORY = 2000
 
 BOT_COLORS = {
     "contrarian_ace":            "#f43f5e",
@@ -22,15 +23,15 @@ BOT_COLORS = {
 }
 
 
-def init(traders, initial_balance, restart_cb=None, initial_history: dict | None = None):
-    global _traders, _initial_balance, _start_time, _restart_callback, _pnl_history
+def init(traders, initial_balance, initial_live_balance=10.0, restart_cb=None, initial_history: dict | None = None):
+    global _traders, _initial_balance, _initial_live_balance, _start_time, _restart_callback, _pnl_history
     _traders = traders
     _initial_balance = initial_balance
+    _initial_live_balance = initial_live_balance
     _restart_callback = restart_cb
     _start_time = time.time()
     with _history_lock:
         if initial_history:
-            # Restaura historial guardado, truncando al máximo
             _pnl_history = {
                 name: pts[-MAX_HISTORY:]
                 for name, pts in initial_history.items()
@@ -107,6 +108,7 @@ def state():
             pass
     return jsonify({
         "initial_balance": _initial_balance,
+        "initial_live_balance": _initial_live_balance,
         "uptime":          f"{h:02d}:{m:02d}:{s:02d}",
         "market_count":    market_count,
         "bots":            bots,
@@ -123,9 +125,10 @@ def history():
 def restart():
     data = request.get_json(silent=True) or {}
     new_balance = float(data.get("balance", _initial_balance))
+    new_live_balance = float(data.get("live_balance", _initial_live_balance))
     if _restart_callback:
-        _restart_callback(new_balance, clear=False)
-        return jsonify({"ok": True, "balance": new_balance})
+        _restart_callback(new_balance, new_live_balance, clear=False)
+        return jsonify({"ok": True, "balance": new_balance, "live_balance": new_live_balance})
     return jsonify({"ok": False, "error": "no callback"}), 500
 
 
@@ -134,8 +137,9 @@ def reset():
     """Borra todos los datos y reinicia desde cero."""
     data = request.get_json(silent=True) or {}
     new_balance = float(data.get("balance", _initial_balance))
+    new_live_balance = float(data.get("live_balance", _initial_live_balance))
     if _restart_callback:
-        _restart_callback(new_balance, clear=True)
+        _restart_callback(new_balance, new_live_balance, clear=True)
         with _history_lock:
             _pnl_history.clear()
         return jsonify({"ok": True})

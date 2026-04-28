@@ -94,7 +94,7 @@ body {
 .layout { padding: 20px 28px; display: flex; flex-direction: column; gap: 20px; }
 
 /* ── BOT SCORECARDS ─────────────────────────────────── */
-.scorecards { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
+.scorecards { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
 .scorecard {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -208,7 +208,7 @@ body {
 <body>
 
 <header class="topbar">
-  <div class="logo">PM <span>Paper</span> Trading</div>
+  <div class="logo">PM <span>Trading</span></div>
   <div class="topbar-stats">
     <div class="tstat">
       <span class="tstat-label">Balance / bot</span>
@@ -229,9 +229,10 @@ body {
   </div>
   <div class="topbar-right">
     <div class="restart-form">
-      <input type="number" id="balance-input" placeholder="$USDC" min="100" step="100">
+      <input type="number" id="balance-input" placeholder="$USDC" min="10" step="10">
       <button class="btn-restart" onclick="restartSim()">Reiniciar</button>
-      <button class="btn-restart" style="background:#374151" onclick="confirmReset()" title="Borrar todos los datos">⬛ Reset</button>
+      <button class="btn-restart" style="background:#f59e0b" onclick="resetPaper()" title="Resettea solo paper">Reset Paper</button>
+      <button class="btn-restart" style="background:#374151" onclick="confirmReset()" title="Borrar todos los datos">Reset All</button>
     </div>
     <div class="live-badge">
       <div class="live-dot"></div>
@@ -505,6 +506,19 @@ async function restartSim() {
   if (d.ok) {
     toast(`Reiniciado con ${fmt$(val)} por bot`);
     $('balance-input').value = '';
+    chart.data.datasets = [];
+    chart.update();
+    selectedBot = null;
+    fetchState();
+  }
+}
+
+async function resetPaper() {
+  if (!confirm('¿Resetear solo los bots PAPER? Los bots LIVE siguen running.')) return;
+  const r = await fetch('/api/reset-paper', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    toast('Bots PAPER reseteados');
     chart.data.datasets = [];
     chart.update();
     selectedBot = null;

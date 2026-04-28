@@ -42,9 +42,6 @@ logging.basicConfig(
 )
 
 PAPER_STRATEGY_CLASSES = [
-    ContrarianStrategy,
-    Polymarket5MomentumStrategy,
-    Polymarket5RSIStrategy,
     Polymarket15MomentumStrategy,
     Polymarket15MeanRevStrategy,
 ]
@@ -66,7 +63,7 @@ _stop_event = threading.Event()
 def build_paper_traders(initial_balance: float, client: PolymarketClient) -> list[PaperTrader]:
     traders = []
     for cls in PAPER_STRATEGY_CLASSES:
-        portfolio = Portfolio(initial_balance=initial_balance, bot_name=cls.name)
+        portfolio = Portfolio(initial_balance=initial_balance, bot_name=cls.name + " (PAPER)")
         strategy = cls(client=client, portfolio=portfolio)
         trader = PaperTrader(strategy=strategy, interval=_interval)
         traders.append(trader)
@@ -76,7 +73,7 @@ def build_paper_traders(initial_balance: float, client: PolymarketClient) -> lis
 def build_live_traders(initial_balance: float, client: PolymarketClient, clob: CLOBClient) -> list[LiveTrader]:
     traders = []
     for cls in LIVE_STRATEGY_CLASSES:
-        portfolio = LivePortfolio(initial_balance=initial_balance, bot_name=cls.name + "_live", clob_client=clob)
+        portfolio = LivePortfolio(initial_balance=initial_balance, bot_name=cls.name + " (LIVE)", clob_client=clob)
         strategy = cls(client=client, portfolio=portfolio)
         trader = LiveTrader(strategy=strategy, interval=_interval)
         traders.append(trader)

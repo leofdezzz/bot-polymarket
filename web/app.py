@@ -132,6 +132,19 @@ def restart():
     return jsonify({"ok": False, "error": "no callback"}), 500
 
 
+@app.route("/api/reset-paper", methods=["POST"])
+def reset_paper():
+    """Resetea solo los bots paper."""
+    if _restart_callback:
+        _restart_callback(_initial_balance, _initial_live_balance, clear=True)
+        with _history_lock:
+            for key in list(_pnl_history.keys()):
+                if "(PAPER)" in key:
+                    _pnl_history[key] = []
+        return jsonify({"ok": True, "message": "Paper traders reset"})
+    return jsonify({"ok": False, "error": "no callback"}), 500
+
+
 @app.route("/api/reset", methods=["POST"])
 def reset():
     """Borra todos los datos y reinicia desde cero."""

@@ -60,24 +60,6 @@ def parse_args():
         default=5000,
         help="Web dashboard port (default: 5000)",
     )
-    parser.add_argument(
-        "--relayer-key",
-        type=str,
-        default="",
-        help="Relayer API key for gasless trading",
-    )
-    parser.add_argument(
-        "--relayer-secret",
-        type=str,
-        default="",
-        help="Relayer API secret",
-    )
-    parser.add_argument(
-        "--relayer-passphrase",
-        type=str,
-        default="",
-        help="Relayer API passphrase",
-    )
     args = parser.parse_args()
 
     if args.live and not args.private_key:

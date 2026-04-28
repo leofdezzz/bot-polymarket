@@ -10,6 +10,7 @@ CHAIN_ID = 137
 try:
     from py_clob_client_v2.client import ClobClient
     from py_clob_client_v2.clob_types import MarketOrderArgs, OrderType
+    from py_clob_client_v2.clob_types import BalanceAllowanceParams, AssetType
     from py_clob_client_v2.order_builder.constants import BUY, SELL
     HAS_CLOB_SDK = True
     ORDER_TYPE_FOK = OrderType.FOK
@@ -56,17 +57,15 @@ class CLOBClient:
         try:
             client = self._get_client()
             try:
-                result = client.get_balance_allowance()
+                params = BalanceAllowanceParams(
+                    asset_type=AssetType.COLLATERAL,
+                    signature_type=0,
+                )
+                result = client.get_balance_allowance(params=params)
                 if isinstance(result, dict):
                     return float(result.get("balance", 0))
-            except AttributeError:
-                pass
-            try:
-                result = client._get(f"{CLOB_HOST}/balance-allowance")
-                if isinstance(result, dict):
-                    return float(result.get("balance", 0))
-            except Exception:
-                pass
+            except (AttributeError, TypeError, Exception) as e:
+                logger.warning(f"Balance allowance failed: {e}")
             return 0.0
         except Exception as e:
             logger.error(f"Error getting balance: {e}")

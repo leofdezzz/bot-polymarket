@@ -48,28 +48,6 @@ class CLOBClient:
     def get_balance(self) -> float:
         try:
             try:
-                balances = self._get_client().get_balances()
-                logger.info(f"Balances response: {balances}")
-                if isinstance(balances, dict):
-                    for token, amount in balances.items():
-                        if token.upper() in ("USDC", "USDC.E", "USDCE", "USDC.EUR"):
-                            return float(amount)
-                    if balances:
-                        return float(list(balances.values())[0])
-                elif isinstance(balances, (list, tuple)) and len(balances) > 0:
-                    return float(balances[0]) if balances[0] else 0.0
-            except Exception as e:
-                logger.warning(f"get_balances failed: {e}")
-
-            try:
-                result = self._get_client()._get(f"{CLOB_HOST}/balance-allowance")
-                logger.info(f"Balance allowance response: {result}")
-                if isinstance(result, dict) and "balance" in result:
-                    return float(result["balance"])
-            except Exception as e:
-                logger.warning(f"balance-allowance failed: {e}")
-
-            try:
                 from web3 import Web3
                 USDC_CONTRACT = "0xC011a73ee8576Fb46F5E1c575732cBCbc3CDE225"
                 RPC_URL = "https://polygon-rpc.com"
@@ -85,8 +63,19 @@ class CLOBClient:
                     balance = raw_balance / (10 ** decimals)
                     logger.info(f"On-chain USDC balance: {balance}")
                     return balance
+                else:
+                    logger.warning("Web3 not connected to Polygon")
             except Exception as e:
                 logger.warning(f"Web3 balance check failed: {e}")
+
+            try:
+                client = self._get_client()
+                result = client._get(f"{CLOB_HOST}/balance-allowance")
+                logger.info(f"Balance allowance response: {result}")
+                if isinstance(result, dict) and "balance" in result:
+                    return float(result["balance"])
+            except Exception as e:
+                logger.warning(f"balance-allowance failed: {e}")
 
             return 0.0
         except Exception as e:

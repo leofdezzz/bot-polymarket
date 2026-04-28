@@ -218,6 +218,8 @@ class LivePortfolio:
         return self.total_value() - self.initial_balance
 
     def total_pnl_pct(self) -> float:
+        if self.initial_balance == 0:
+            return 0.0
         return self.total_pnl() / self.initial_balance * 100
 
     def win_rate(self) -> float:
